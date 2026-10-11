@@ -1,0 +1,15 @@
+{
+  "name": "chimbo-event-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Single-event attendee registration, QR scanning, exhibitor, and admin platform.",
+  "scripts": {
+    "dev": "pnpm --parallel --filter backend --filter frontend dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build": "pnpm --filter backend build && pnpm --filter frontend build",
+    "test": "pnpm --filter backend test",
+    "lint": "pnpm --filter frontend lint"
+  },
+  "packageManager": "pnpm@11.25.0"
+}

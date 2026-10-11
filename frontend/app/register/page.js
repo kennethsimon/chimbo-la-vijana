@@ -78,9 +78,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_10%_0%,rgba(245,185,66,0.24),transparent_30%),linear-gradient(135deg,hsl(var(--background))_0%,hsl(var(--secondary))_58%,hsl(var(--background))_100%)] px-4 py-4 sm:py-6">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_10%_0%,rgba(245,185,66,0.24),transparent_30%),linear-gradient(135deg,hsl(var(--background))_0%,hsl(var(--secondary))_58%,hsl(var(--background))_100%)] px-4 py-3 sm:py-5">
       <div className="mx-auto w-full max-w-7xl">
-        <header className="mb-5 flex flex-wrap items-center justify-between gap-3 sm:mb-8 sm:gap-4">
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-5 sm:gap-4">
           <div className="flex items-center gap-3">
             <BrandMark />
             <span>
@@ -95,14 +95,14 @@ export default function RegisterPage() {
         </header>
 
         <section className="grid gap-4 sm:gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-          <div className="py-1 sm:py-4 lg:py-10">
-            <div className="mb-3 inline-flex rounded-full bg-accent/25 px-3 py-1 text-[11px] font-bold uppercase text-accent-foreground sm:mb-4 sm:text-xs">{t("heroEyebrow")}</div>
-            <h1 className="max-w-3xl text-balance text-[2rem] font-black leading-[1.08] tracking-normal text-foreground sm:text-5xl lg:text-6xl">{t("heroTitle")}</h1>
-            <p className="mt-2 max-w-2xl text-sm font-black uppercase tracking-normal text-primary sm:mt-3 sm:text-lg">{t("heroTagline")}</p>
-            <p className="mt-3 max-w-2xl text-base font-semibold text-foreground sm:text-2xl">{t("heroSubtitle")}</p>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:mt-5 sm:text-lg sm:leading-8">{t("heroParagraph")}</p>
+          <div className="py-0 lg:py-2">
+            <div className="mb-2 inline-flex rounded-full bg-accent/25 px-3 py-1 text-[10px] font-bold uppercase text-accent-foreground sm:text-[11px]">{t("heroEyebrow")}</div>
+            <h1 className="max-w-3xl text-balance text-[1.6rem] font-black leading-[1.04] tracking-normal text-foreground sm:text-4xl lg:text-5xl">{t("heroTitle")}</h1>
+            <p className="mt-1.5 max-w-2xl text-xs font-black uppercase tracking-normal text-primary sm:text-sm lg:text-base">{t("heroTagline")}</p>
+            <p className="mt-2 max-w-2xl text-sm font-semibold text-foreground sm:text-lg">{t("heroSubtitle")}</p>
+            <p className="mt-2 max-w-2xl text-xs leading-5 text-muted-foreground sm:text-sm sm:leading-6">{t("heroParagraph")}</p>
 
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:mt-8 sm:grid-cols-3 sm:gap-3">
+            <div className="mt-3 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-3">
               <EventChip icon={<CalendarDays size={18} />} label={t("eventDateLabel")} value={t("eventDateValue")} />
               <EventChip icon={<Clock size={18} />} label={t("eventTimeLabel")} value={t("eventTimeValue")} />
               <EventChip icon={<MapPin size={18} />} label={t("eventLocationLabel")} value={t("eventLocationValue")} />
@@ -110,7 +110,7 @@ export default function RegisterPage() {
 
             <Countdown countdown={countdown} t={t} />
 
-            <div className="mt-4 grid gap-2 text-sm leading-6 text-muted-foreground sm:mt-6 sm:text-base sm:leading-7">
+            <div className="mt-3 grid gap-1.5 text-xs leading-5 text-muted-foreground sm:mt-4 sm:text-sm sm:leading-6">
               <p className="font-semibold text-foreground">{t("heroPullUp")}</p>
               <p>{t("heroCoupon")}</p>
               <p className="font-semibold text-primary">{t("heroQuestion")}</p>
@@ -267,9 +267,12 @@ function calculateAge(birthDate) {
 
 function EventChip({ icon, label, value }) {
   return (
-    <div className="rounded-md border bg-card/75 p-3 shadow-sm backdrop-blur sm:rounded-lg sm:p-4">
-      <div className="mb-1 flex items-center gap-1.5 text-primary sm:mb-2 sm:gap-2">{icon}<span className="text-[10px] font-bold uppercase sm:text-xs">{label}</span></div>
-      <strong className="block text-[11px] leading-4 sm:text-sm sm:leading-5">{value}</strong>
+    <div className="rounded-md border bg-card/75 p-2 shadow-sm backdrop-blur sm:rounded-lg sm:p-3">
+      <div className="mb-1 flex items-center gap-1 text-primary sm:gap-1.5">
+        <span className="grid size-4 shrink-0 place-items-center sm:size-5">{icon}</span>
+        <span className="text-[9px] font-bold uppercase sm:text-[11px]">{label}</span>
+      </div>
+      <strong className="block text-[10px] leading-3 sm:text-xs sm:leading-4">{value}</strong>
     </div>
   );
 }
@@ -277,7 +280,7 @@ function EventChip({ icon, label, value }) {
 function Countdown({ countdown, t }) {
   if (countdown.done) {
     return (
-      <div className="mt-4 rounded-md border bg-card/80 p-3 text-sm font-semibold text-primary shadow-sm sm:mt-6">
+      <div className="mt-3 rounded-md border bg-card/80 p-2.5 text-xs font-semibold text-primary shadow-sm sm:mt-4 sm:text-sm">
         {t("countdownStarted")}
       </div>
     );
@@ -291,13 +294,13 @@ function Countdown({ countdown, t }) {
   ];
 
   return (
-    <div className="mt-4 rounded-md border bg-card/80 p-3 shadow-sm backdrop-blur sm:mt-6 sm:p-4">
-      <div className="mb-3 text-xs font-bold uppercase text-primary">{t("countdownTitle")}</div>
+    <div className="mt-3 rounded-md border bg-card/80 p-2.5 shadow-sm backdrop-blur sm:mt-4 sm:p-3">
+      <div className="mb-2 text-[10px] font-bold uppercase text-primary sm:text-xs">{t("countdownTitle")}</div>
       <div className="grid grid-cols-4 gap-2">
         {items.map(([label, value]) => (
-          <div className="rounded-md bg-secondary px-2 py-3 text-center" key={label}>
-            <strong className="block text-xl font-black leading-none text-foreground sm:text-2xl">{String(value).padStart(2, "0")}</strong>
-            <span className="mt-1 block text-[10px] font-semibold uppercase text-muted-foreground sm:text-xs">{label}</span>
+          <div className="rounded-md bg-secondary px-1.5 py-2 text-center" key={label}>
+            <strong className="block text-base font-black leading-none text-foreground sm:text-xl">{String(value).padStart(2, "0")}</strong>
+            <span className="mt-1 block text-[8px] font-semibold uppercase leading-none text-muted-foreground sm:text-[10px]">{label}</span>
           </div>
         ))}
       </div>

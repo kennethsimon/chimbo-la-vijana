@@ -1,0 +1,24 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#F4FBF9"/>
+  <circle cx="1010" cy="72" r="210" fill="#F5B942" fill-opacity="0.22"/>
+  <circle cx="98" cy="564" r="260" fill="#247B7B" fill-opacity="0.13"/>
+  <rect x="72" y="70" width="1056" height="490" rx="34" fill="white" stroke="#D8E7E5" stroke-width="2"/>
+  <rect x="72" y="70" width="1056" height="162" rx="34" fill="#0F5D59"/>
+  <path d="M72 197H1128V232H72V197Z" fill="#0F5D59"/>
+  <image href="/chimbo-logo.png" x="112" y="100" width="112" height="130" preserveAspectRatio="xMidYMid meet"/>
+  <text x="252" y="142" fill="#F5B942" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="6">TIKETI YA TUKIO</text>
+  <text x="252" y="202" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="700">Chimbo La Vijana Brunch</text>
+  <text x="112" y="315" fill="#17262A" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700">Register early. Get your QR Code by email.</text>
+  <text x="112" y="374" fill="#64787B" font-family="Arial, Helvetica, sans-serif" font-size="30">Use one ticket for entry, booth services, and food confirmation.</text>
+  <rect x="112" y="430" width="345" height="72" rx="22" fill="#E7F3F1"/>
+  <text x="142" y="477" fill="#247B7B" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">chimbolavijana.co.tz</text>
+  <rect x="886" y="302" width="170" height="170" rx="28" fill="#F4FBF9" stroke="#D8E7E5" stroke-width="2"/>
+  <rect x="922" y="338" width="28" height="28" fill="#17262A"/>
+  <rect x="966" y="338" width="28" height="28" fill="#17262A"/>
+  <rect x="1010" y="338" width="28" height="28" fill="#17262A"/>
+  <rect x="922" y="382" width="28" height="28" fill="#17262A"/>
+  <rect x="1010" y="382" width="28" height="28" fill="#17262A"/>
+  <rect x="922" y="426" width="28" height="28" fill="#17262A"/>
+  <rect x="966" y="426" width="28" height="28" fill="#17262A"/>
+  <rect x="1010" y="426" width="28" height="28" fill="#17262A"/>
+</svg>

@@ -1,4 +1,4 @@
-const baseUrl = "https://chimbolavijana.co.tz";
+const baseUrl = "https://www.chimbolavijana.co.tz";
 
 export default function sitemap() {
   const now = new Date();

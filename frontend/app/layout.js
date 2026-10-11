@@ -4,7 +4,7 @@ import { LanguageProvider } from "../components/LanguageProvider";
 import { ThemeProvider } from "../components/ThemeProvider";
 import { ToastProvider } from "../components/ToastProvider";
 
-const siteUrl = "https://chimbolavijana.co.tz";
+const siteUrl = "https://www.chimbolavijana.co.tz";
 const siteName = "Chimbo La Vijana Brunch";
 const siteDescription = "Register for Chimbo La Vijana Brunch, receive your QR ticket by email, and help event staff manage entry, food confirmation, booth visits, and event operations.";
 

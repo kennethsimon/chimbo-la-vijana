@@ -372,6 +372,24 @@ Recommended production setup:
 
 Camera QR scanning requires a secure context in most browsers, so production should use HTTPS.
 
+## Vercel Frontend Deployment
+
+Deploy the Next.js frontend as a Vercel project with:
+
+```txt
+Root Directory: frontend
+Framework Preset: Next.js
+Build Command: pnpm build
+```
+
+Set this Vercel frontend environment variable:
+
+```ini
+NEXT_PUBLIC_API_BASE_URL=https://your-backend-domain.example.com/api
+```
+
+See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for the full setup guide.
+
 ## Production Checklist
 
 - Set production `DATABASE_URL`

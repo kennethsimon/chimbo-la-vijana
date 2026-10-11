@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, MapPin, QrCode } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, MapPin } from "lucide-react";
 import { ACTIVITIES, REGIONS } from "../../lib/regions";
 import { post } from "../../lib/api";
 import { Button, Card, CardContent, Field, Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Spinner, TextInput } from "../../components/ui";
@@ -12,6 +12,7 @@ import { ThemeToggle } from "../../components/ThemeToggle";
 
 const TANZANIA_PHONE_PATTERN = "^(\\+255|255|0)(6|7)\\d{8}$";
 const TANZANIA_PHONE_REGEX = /^(\+255|255|0)(6|7)\d{8}$/;
+const EVENT_START_AT = new Date("2026-10-24T12:00:00+03:00").getTime();
 
 const initialForm = {
   name: "",
@@ -32,7 +33,13 @@ export default function RegisterPage() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [birthPickerOpen, setBirthPickerOpen] = useState(false);
+  const [countdown, setCountdown] = useState(() => getCountdownParts());
   const districts = useMemo(() => REGIONS[form.region] || [], [form.region]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCountdown(getCountdownParts()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   function update(field, value) {
     setForm((prev) => ({
@@ -78,7 +85,7 @@ export default function RegisterPage() {
             <BrandMark />
             <span>
               <span className="block text-lg font-bold">Chimbo La Vijana Brunch</span>
-              <span className="block text-sm text-muted-foreground">Usajili wa washiriki</span>
+              <span className="block text-sm text-muted-foreground">{t("headerSubtitle")}</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -89,14 +96,24 @@ export default function RegisterPage() {
 
         <section className="grid gap-4 sm:gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
           <div className="py-1 sm:py-4 lg:py-10">
-            <div className="mb-3 inline-flex rounded-full bg-accent/25 px-3 py-1 text-[11px] font-bold uppercase text-accent-foreground sm:mb-4 sm:text-xs">Vijana · Taasisi · Fursa</div>
+            <div className="mb-3 inline-flex rounded-full bg-accent/25 px-3 py-1 text-[11px] font-bold uppercase text-accent-foreground sm:mb-4 sm:text-xs">{t("heroEyebrow")}</div>
             <h1 className="max-w-3xl text-balance text-[2rem] font-black leading-[1.08] tracking-normal text-foreground sm:text-5xl lg:text-6xl">{t("heroTitle")}</h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:mt-5 sm:text-lg sm:leading-8">{t("heroText")}</p>
+            <p className="mt-2 max-w-2xl text-sm font-black uppercase tracking-normal text-primary sm:mt-3 sm:text-lg">{t("heroTagline")}</p>
+            <p className="mt-3 max-w-2xl text-base font-semibold text-foreground sm:text-2xl">{t("heroSubtitle")}</p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:mt-5 sm:text-lg sm:leading-8">{t("heroParagraph")}</p>
 
-            <div className="mt-4 grid grid-cols-3 gap-2 sm:mt-8 sm:gap-3">
-              <EventChip icon={<CalendarDays size={18} />} label="Tarehe" value="Itawekwa na waandaaji" />
-              <EventChip icon={<MapPin size={18} />} label="Mahali" value="Ukumbi wa tukio" />
-              <EventChip icon={<QrCode size={18} />} label="Tiketi" value="QR Code kwa email" />
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:mt-8 sm:grid-cols-3 sm:gap-3">
+              <EventChip icon={<CalendarDays size={18} />} label={t("eventDateLabel")} value={t("eventDateValue")} />
+              <EventChip icon={<Clock size={18} />} label={t("eventTimeLabel")} value={t("eventTimeValue")} />
+              <EventChip icon={<MapPin size={18} />} label={t("eventLocationLabel")} value={t("eventLocationValue")} />
+            </div>
+
+            <Countdown countdown={countdown} t={t} />
+
+            <div className="mt-4 grid gap-2 text-sm leading-6 text-muted-foreground sm:mt-6 sm:text-base sm:leading-7">
+              <p className="font-semibold text-foreground">{t("heroPullUp")}</p>
+              <p>{t("heroCoupon")}</p>
+              <p className="font-semibold text-primary">{t("heroQuestion")}</p>
             </div>
           </div>
 
@@ -143,6 +160,7 @@ export default function RegisterPage() {
                 </div>
                 <Button disabled={loading} size="lg">{loading ? <Spinner /> : null}{loading ? t("registering") : t("registerSubmit")}</Button>
               </form>
+              <p className="text-center text-xs font-bold uppercase tracking-normal text-primary">{t("registerNow")}</p>
             </CardContent>
           </Card>
         </section>
@@ -249,9 +267,40 @@ function calculateAge(birthDate) {
 
 function EventChip({ icon, label, value }) {
   return (
-    <div className="rounded-md border bg-card/75 p-2 shadow-sm backdrop-blur sm:rounded-lg sm:p-4">
+    <div className="rounded-md border bg-card/75 p-3 shadow-sm backdrop-blur sm:rounded-lg sm:p-4">
       <div className="mb-1 flex items-center gap-1.5 text-primary sm:mb-2 sm:gap-2">{icon}<span className="text-[10px] font-bold uppercase sm:text-xs">{label}</span></div>
       <strong className="block text-[11px] leading-4 sm:text-sm sm:leading-5">{value}</strong>
+    </div>
+  );
+}
+
+function Countdown({ countdown, t }) {
+  if (countdown.done) {
+    return (
+      <div className="mt-4 rounded-md border bg-card/80 p-3 text-sm font-semibold text-primary shadow-sm sm:mt-6">
+        {t("countdownStarted")}
+      </div>
+    );
+  }
+
+  const items = [
+    [t("countdownDays"), countdown.days],
+    [t("countdownHours"), countdown.hours],
+    [t("countdownMinutes"), countdown.minutes],
+    [t("countdownSeconds"), countdown.seconds]
+  ];
+
+  return (
+    <div className="mt-4 rounded-md border bg-card/80 p-3 shadow-sm backdrop-blur sm:mt-6 sm:p-4">
+      <div className="mb-3 text-xs font-bold uppercase text-primary">{t("countdownTitle")}</div>
+      <div className="grid grid-cols-4 gap-2">
+        {items.map(([label, value]) => (
+          <div className="rounded-md bg-secondary px-2 py-3 text-center" key={label}>
+            <strong className="block text-xl font-black leading-none text-foreground sm:text-2xl">{String(value).padStart(2, "0")}</strong>
+            <span className="mt-1 block text-[10px] font-semibold uppercase text-muted-foreground sm:text-xs">{label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -303,4 +352,21 @@ function getCalendarDays(viewDate) {
       inMonth: date.getMonth() === viewDate.getMonth()
     };
   });
+}
+
+function getCountdownParts() {
+  const distance = Math.max(0, EVENT_START_AT - Date.now());
+  const totalSeconds = Math.floor(distance / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return {
+    days,
+    hours,
+    minutes,
+    seconds,
+    done: distance === 0
+  };
 }

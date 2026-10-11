@@ -380,6 +380,7 @@ Deploy the Next.js frontend as a Vercel project with:
 Root Directory: frontend
 Framework Preset: Next.js
 Build Command: pnpm build
+Node.js Version: 24.x
 ```
 
 Set this Vercel frontend environment variable:

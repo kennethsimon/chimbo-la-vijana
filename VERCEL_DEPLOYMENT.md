@@ -19,6 +19,7 @@ Install Command: pnpm install --frozen-lockfile
 Build Command: pnpm build
 Output Directory: .next
 Development Command: pnpm dev
+Node.js Version: 24.x
 ```
 
 The important setting is:
@@ -28,6 +29,12 @@ Root Directory: frontend
 ```
 
 Without this, Vercel may try to build the monorepo root instead of the Next.js app.
+
+Current production frontend URL:
+
+```txt
+https://chimbo-la-vijana.vercel.app
+```
 
 ## Required Frontend Environment Variable
 
@@ -44,6 +51,8 @@ For example:
 ```ini
 NEXT_PUBLIC_API_BASE_URL=https://api.chimbo.example.com/api
 ```
+
+At the time of this setup, no frontend environment variables were configured yet because the production backend URL was not available.
 
 ## Backend CORS Settings
 

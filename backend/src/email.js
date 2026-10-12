@@ -22,7 +22,9 @@ export async function sendTicketEmail({ attendee, ticketCode }) {
   const eventName = escapeHtml(config.eventName);
   const attendeeName = escapeHtml(attendee.name);
   const safeTicketCode = escapeHtml(ticketCode);
-  const ticketSvg = makeTicketSvg({ eventName, attendeeName, safeTicketCode, qrBase64, logoBase64 });
+  const attendanceDaysText = formatAttendanceDays(attendee.attendance_days);
+  const safeAttendanceDays = escapeHtml(attendanceDaysText);
+  const ticketSvg = makeTicketSvg({ eventName, attendeeName, safeTicketCode, attendanceDaysText, qrBase64, logoBase64 });
   const html = `
     <div style="margin:0;padding:0;background:#f4f7f7;font-family:Arial,Helvetica,sans-serif;color:#142326;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7f7;margin:0;padding:28px 12px;">
@@ -61,7 +63,7 @@ export async function sendTicketEmail({ attendee, ticketCode }) {
                           <tr>
                             <td style="padding:0 18px 12px 0;">
                               <p style="margin:0 0 4px;font-size:12px;color:#6b7b7c;text-transform:uppercase;letter-spacing:.8px;">Tarehe</p>
-                              <p style="margin:0;font-size:15px;font-weight:700;color:#111b1e;">Event day</p>
+                              <p style="margin:0;font-size:15px;font-weight:700;color:#111b1e;">${safeAttendanceDays}</p>
                             </td>
                             <td style="padding:0 0 12px;">
                               <p style="margin:0 0 4px;font-size:12px;color:#6b7b7c;text-transform:uppercase;letter-spacing:.8px;">Mahali</p>
@@ -259,7 +261,7 @@ export async function sendStaffCredentialsEmail({ user, password, roles }) {
   }
 }
 
-function makeTicketSvg({ eventName, attendeeName, safeTicketCode, qrBase64, logoBase64 }) {
+function makeTicketSvg({ eventName, attendeeName, safeTicketCode, attendanceDaysText, qrBase64, logoBase64 }) {
   return `
 <svg width="1000" height="620" viewBox="0 0 1000 620" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="1000" height="620" rx="36" fill="#F4F7F7"/>
@@ -275,7 +277,7 @@ function makeTicketSvg({ eventName, attendeeName, safeTicketCode, qrBase64, logo
   <rect x="82" y="414" width="322" height="80" rx="14" fill="#EFFAFA" stroke="#0D8F87" stroke-width="2" stroke-dasharray="5 5"/>
   <text x="110" y="466" fill="#0A5D58" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="800" letter-spacing="3">${escapeSvg(safeTicketCode)}</text>
   <text x="82" y="536" fill="#6B7B7C" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2">TAREHE</text>
-  <text x="82" y="562" fill="#111B1E" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800">Event day</text>
+  <text x="82" y="562" fill="#111B1E" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800">${escapeSvg(attendanceDaysText)}</text>
   <text x="222" y="536" fill="#6B7B7C" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="2">MAHALI</text>
   <text x="222" y="562" fill="#111B1E" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="800">Venue entrance</text>
   <rect x="675" y="270" width="210" height="210" rx="24" fill="white" stroke="#DCE7E7" stroke-width="2"/>
@@ -312,6 +314,16 @@ function makeCredentialSvg({ eventName, safeName, safeEmail, safePassword, roleT
 function formatRoles(roles = []) {
   const labels = { admin: "Admin", exhibitor: "Banda", food: "Chakula" };
   return roles.map((role) => labels[role] || role).join(" · ");
+}
+
+function formatAttendanceDays(days = []) {
+  const labels = {
+    "2026-10-24": "24 October",
+    "2026-10-25": "25 October"
+  };
+  const selected = Array.isArray(days) && days.length ? days : ["2026-10-24", "2026-10-25"];
+  if (selected.length === 2) return "24 & 25 October";
+  return labels[selected[0]] || selected[0] || "24 & 25 October";
 }
 
 function safeFileName(value) {

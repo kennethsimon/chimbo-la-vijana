@@ -39,8 +39,8 @@ async function createAttendee(data) {
       const ticketCode = generateTicketCode();
       try {
         const { rows } = await client.query(
-          `INSERT INTO attendees (ticket_code, name, phone, email, age, gender, region, district, activity)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO attendees (ticket_code, name, phone, email, age, gender, region, district, activity, attendance_days)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING *`,
           [
             ticketCode,
@@ -51,7 +51,8 @@ async function createAttendee(data) {
             data.gender,
             data.region,
             data.district,
-            data.activity
+            data.activity,
+            data.attendanceDays
           ]
         );
         return rows[0];
@@ -82,6 +83,7 @@ function publicAttendee(row) {
     ticketCode: row.ticket_code,
     name: row.name,
     email: row.email,
+    attendanceDays: row.attendance_days,
     createdAt: row.created_at
   };
 }

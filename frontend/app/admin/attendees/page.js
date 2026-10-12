@@ -88,12 +88,18 @@ function Attendees() {
             { key: "ticketCode", label: "Tiketi", render: (a) => <span className="rounded-md bg-secondary px-2 py-1 text-sm font-black text-primary">{a.ticketCode}</span> },
             { key: "contact", label: "Mawasiliano", render: (a) => <>{a.phone}<div className="text-sm text-muted-foreground">{a.email}</div></> },
             { key: "location", label: "Eneo", render: (a) => <>{a.district}<div className="text-sm text-muted-foreground">{a.region}</div></> },
-            { key: "status", label: "Hali", render: (a) => <div className="grid gap-1.5"><Badge tone="neutral">{a.visitCount} ziara</Badge><Badge tone={a.foodClaimedAt ? "ok" : "warn"}>{a.foodClaimedAt ? "Chakula kimetumika" : "Chakula bado"}</Badge></div> }
+            { key: "days", label: "Siku", render: (a) => <Badge tone="neutral">{formatAttendanceDays(a.attendanceDays)}</Badge> },
+            { key: "status", label: "Hali", render: (a) => <div className="grid gap-1.5"><Badge tone="neutral">{a.visitCount} ziara</Badge><Badge tone={a.foodClaimCount ? "ok" : "warn"}>{a.foodClaimCount ? `${a.foodClaimCount} chakula` : "Chakula bado"}</Badge></div> }
           ]}
         />
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function formatAttendanceDays(days = []) {
+  if (days.length === 2) return "24 & 25 Oct";
+  return days[0] === "2026-10-25" ? "25 Oct" : "24 Oct";
 }
 

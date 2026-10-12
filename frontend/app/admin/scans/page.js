@@ -70,6 +70,7 @@ function Scans({ user }) {
           columns={[
             { key: "attendee", label: "Mshiriki", render: (scan) => <><strong>{scan.attendee_name}</strong><div className="text-sm text-muted-foreground">{scan.ticket_code}</div></> },
             { key: "type", label: "Aina", render: (scan) => <Badge tone={scan.type === "food" ? "warn" : "neutral"}>{scan.type === "food" ? "Chakula" : "Banda"}</Badge> },
+            { key: "scan_day", label: "Siku", render: (scan) => <Badge tone="neutral">{formatEventDay(scan.scan_day)}</Badge> },
             { key: "booth", label: "Banda/eneo", render: (scan) => <Badge tone="neutral">{scan.booth_name}</Badge> },
             { key: "survey", label: "Utafiti", render: (scan) => <>{scan.service || "-"}<div className="text-sm text-muted-foreground">Kuridhika: {scan.satisfaction || "-"}</div>{scan.question ? <div>{scan.question}</div> : null}</> },
             { key: "scanned_by", label: "Aliyescan" },
@@ -84,5 +85,9 @@ function Scans({ user }) {
 
 function hasRole(user, role) {
   return user?.roles?.includes(role) || user?.role === role;
+}
+
+function formatEventDay(day) {
+  return String(day).startsWith("2026-10-25") ? "25 Oct" : "24 Oct";
 }
 

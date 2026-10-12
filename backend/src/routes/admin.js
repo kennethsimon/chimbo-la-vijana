@@ -18,7 +18,7 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
 
     const { rows } = await pool.query(
       `WITH scan_rows AS (
-        SELECT 'booth' AS type, visits.id, visits.service, visits.satisfaction, visits.question, visits.created_at,
+        SELECT 'booth' AS type, visits.id, visits.service, visits.satisfaction, visits.question, visits.created_at, visits.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 booths.name AS booth_name,
                 users.name AS scanned_by
@@ -28,7 +28,7 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
          JOIN users ON users.id = visits.scanned_by_user_id
          ${visitWhere}
          UNION ALL
-         SELECT 'food' AS type, food_claims.id, NULL AS service, NULL AS satisfaction, NULL AS question, food_claims.created_at,
+         SELECT 'food' AS type, food_claims.id, NULL AS service, NULL AS satisfaction, NULL AS question, food_claims.created_at, food_claims.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 'Food desk' AS booth_name,
                 users.name AS scanned_by
@@ -56,7 +56,7 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
     const foodWhere = hasRole(req.user, "admin") ? "" : "WHERE food_claims.claimed_by_user_id = $1";
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
     const { rows } = await pool.query(
-      `SELECT 'booth' AS type, visits.created_at, attendees.name AS attendee_name, attendees.ticket_code,
+      `SELECT 'booth' AS type, visits.created_at, visits.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
               booths.name AS booth_name, users.name AS scanned_by, visits.service, visits.satisfaction, visits.question
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
@@ -64,7 +64,7 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        JOIN users ON users.id = visits.scanned_by_user_id
        ${visitWhere}
        UNION ALL
-       SELECT 'food' AS type, food_claims.created_at, attendees.name AS attendee_name, attendees.ticket_code,
+       SELECT 'food' AS type, food_claims.created_at, food_claims.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
               'Food desk' AS booth_name, users.name AS scanned_by, NULL AS service, NULL AS satisfaction, NULL AS question
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
@@ -73,7 +73,7 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        ORDER BY created_at DESC`,
       params
     );
-    sendCsv(res, "scans.csv", ["type", "created_at", "attendee_name", "ticket_code", "booth_name", "scanned_by", "service", "satisfaction", "question"], rows);
+    sendCsv(res, "scans.csv", ["type", "scan_day", "created_at", "attendee_name", "ticket_code", "booth_name", "scanned_by", "service", "satisfaction", "question"], rows);
   } catch (error) {
     next(error);
   }
@@ -179,18 +179,18 @@ adminRouter.get("/attendees/export", async (req, res, next) => {
     }
     const { rows } = await pool.query(
       `SELECT attendees.ticket_code, attendees.name, attendees.phone, attendees.email, attendees.age, attendees.gender,
-              attendees.region, attendees.district, attendees.activity, attendees.created_at,
+              attendees.region, attendees.district, attendees.activity, attendees.attendance_days, attendees.created_at,
               count(visits.id)::int AS visit_count,
-              food_claims.created_at AS food_claimed_at
+              count(DISTINCT food_claims.id)::int AS food_claim_count
        FROM attendees
        LEFT JOIN visits ON visits.attendee_id = attendees.id
        LEFT JOIN food_claims ON food_claims.attendee_id = attendees.id
        ${where}
-       GROUP BY attendees.id, food_claims.created_at
+       GROUP BY attendees.id
        ORDER BY attendees.created_at DESC`,
       params
     );
-    sendCsv(res, "attendees.csv", ["ticket_code", "name", "phone", "email", "age", "gender", "region", "district", "activity", "visit_count", "food_claimed_at", "created_at"], rows);
+    sendCsv(res, "attendees.csv", ["ticket_code", "name", "phone", "email", "age", "gender", "region", "district", "activity", "attendance_days", "visit_count", "food_claim_count", "created_at"], rows);
   } catch (error) {
     next(error);
   }
@@ -212,14 +212,14 @@ adminRouter.get("/attendees", async (req, res, next) => {
     params.push(limit, offset);
     const { rows } = await pool.query(
       `SELECT attendees.*,
-              count(visits.id)::int AS visit_count,
-              food_claims.created_at AS food_claimed_at,
+              count(DISTINCT visits.id)::int AS visit_count,
+              count(DISTINCT food_claims.id)::int AS food_claim_count,
               count(*) OVER()::int AS total_count
        FROM attendees
        LEFT JOIN visits ON visits.attendee_id = attendees.id
        LEFT JOIN food_claims ON food_claims.attendee_id = attendees.id
        ${where}
-       GROUP BY attendees.id, food_claims.created_at
+       GROUP BY attendees.id
        ORDER BY attendees.created_at DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
@@ -404,8 +404,10 @@ function mapAttendeeListRow(row) {
     region: row.region,
     district: row.district,
     activity: row.activity,
+    attendanceDays: row.attendance_days,
     visitCount: row.visit_count,
-    foodClaimedAt: row.food_claimed_at,
+    foodClaimCount: row.food_claim_count,
+    foodClaimedAt: row.food_claim_count > 0 ? row.food_claim_count : null,
     createdAt: row.created_at
   };
 }

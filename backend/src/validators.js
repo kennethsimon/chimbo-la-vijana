@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const EVENT_DAYS = ["2026-10-24", "2026-10-25"];
+const eventDaySchema = z.enum(EVENT_DAYS);
+
 const tanzaniaPhoneSchema = z.string()
   .trim()
   .transform((value) => value.replace(/[\s-]/g, ""))
@@ -20,7 +23,8 @@ export const registrationSchema = z.object({
   gender: z.string().trim().min(1).max(40),
   region: z.string().trim().min(1).max(120),
   district: z.string().trim().min(1).max(120),
-  activity: z.string().trim().min(1).max(160)
+  activity: z.string().trim().min(1).max(160),
+  attendanceDays: z.array(eventDaySchema).min(1).max(2).default(EVENT_DAYS)
 });
 
 export const loginSchema = z.object({
@@ -35,19 +39,22 @@ export const changePasswordSchema = z.object({
 
 export const lookupSchema = z.object({
   ticketCode: z.string().trim().min(4).max(80),
-  boothId: z.string().uuid().optional().nullable()
+  boothId: z.string().uuid().optional().nullable(),
+  scanDay: eventDaySchema.optional()
 });
 
 export const visitSchema = z.object({
   ticketCode: z.string().trim().min(4).max(80),
   boothId: z.string().uuid().optional().nullable(),
+  scanDay: eventDaySchema,
   service: z.string().trim().max(160).optional().nullable(),
   satisfaction: z.coerce.number().int().min(1).max(3).optional().nullable(),
   question: z.string().trim().max(500).optional().nullable()
 });
 
 export const foodSchema = z.object({
-  ticketCode: z.string().trim().min(4).max(80)
+  ticketCode: z.string().trim().min(4).max(80),
+  scanDay: eventDaySchema
 });
 
 export const createUserSchema = z.object({

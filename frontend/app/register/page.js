@@ -23,7 +23,8 @@ const initialForm = {
   gender: "",
   region: "",
   district: "",
-  activity: ""
+  activity: "",
+  attendanceChoice: "both"
 };
 
 export default function RegisterPage() {
@@ -60,8 +61,10 @@ export default function RegisterPage() {
     try {
       const payload = {
         ...form,
-        age: calculateAge(form.birthDate)
+        age: calculateAge(form.birthDate),
+        attendanceDays: attendanceChoiceToDays(form.attendanceChoice)
       };
+      delete payload.attendanceChoice;
       const result = await post("/public/registrations", payload);
       setStatus({
         type: "ok",
@@ -150,6 +153,18 @@ export default function RegisterPage() {
                   </Field>
                   <Field label={t("activity")}>
                     <AppSelect value={form.activity} onValueChange={(value) => update("activity", value)} placeholder={t("selectActivity")} options={ACTIVITIES} />
+                  </Field>
+                  <Field label={t("attendanceDays")}>
+                    <AppSelect
+                      value={form.attendanceChoice}
+                      onValueChange={(value) => update("attendanceChoice", value)}
+                      placeholder={t("selectAttendanceDays")}
+                      options={[
+                        { label: t("attendDayOne"), value: "day1" },
+                        { label: t("attendDayTwo"), value: "day2" },
+                        { label: t("attendBothDays"), value: "both" }
+                      ]}
+                    />
                   </Field>
                   <Field label={t("region")}>
                     <AppSelect value={form.region} onValueChange={(value) => update("region", value)} placeholder={t("selectRegion")} options={Object.keys(REGIONS)} />
@@ -263,6 +278,12 @@ function calculateAge(birthDate) {
     age -= 1;
   }
   return age;
+}
+
+function attendanceChoiceToDays(choice) {
+  if (choice === "day1") return ["2026-10-24"];
+  if (choice === "day2") return ["2026-10-25"];
+  return ["2026-10-24", "2026-10-25"];
 }
 
 function EventChip({ icon, label, value }) {

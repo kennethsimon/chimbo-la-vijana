@@ -32,6 +32,7 @@ function Scanner({ user }) {
   const [visit, setVisit] = useState({ service: SERVICES[0], satisfaction: 3, question: "" });
   const [booths, setBooths] = useState([]);
   const [selectedBoothId, setSelectedBoothId] = useState("");
+  const [scanDay, setScanDay] = useState(defaultScanDay());
   const toast = useToast();
   const isAdmin = hasRole(user, "admin");
   const selectedBooth = booths.find((booth) => booth.id === selectedBoothId);
@@ -144,8 +145,8 @@ function Scanner({ user }) {
       await lookupTicket(ticketCode);
     } catch (error) {
       if (error.status === 409) {
-        setUsedDialog({ title: "QR imeshatumika", text: "Tiketi hii tayari imetumika kwenye banda hili." });
-        toast.warning("Tiketi hii tayari imetumika kwenye banda hili.");
+        setUsedDialog({ title: "QR imeshatumika", text: `Tiketi hii tayari imetumika kwenye banda hili siku ya ${formatEventDay(scanDay)}.` });
+        toast.warning("Tiketi hii tayari imetumika kwenye banda hili siku hii.");
         return;
       }
       toast.error(error.message);
@@ -157,13 +158,13 @@ function Scanner({ user }) {
   async function claimFood() {
     setLoading("food");
     try {
-      const result = await post("/exhibitor/scans/food", { ticketCode });
+      const result = await post("/exhibitor/scans/food", { ticketCode, scanDay });
       toast.success(`Food claim confirmed at ${new Date(result.claimedAt).toLocaleTimeString()}`);
       await lookupTicket(ticketCode);
     } catch (error) {
       if (error.status === 409) {
-        setUsedDialog({ title: "QR imeshatumika", text: "Tiketi hii tayari imetumika kwa chakula." });
-        toast.warning("Tiketi hii tayari imetumika kwa chakula.");
+        setUsedDialog({ title: "QR imeshatumika", text: `Tiketi hii tayari imetumika kwa chakula siku ya ${formatEventDay(scanDay)}.` });
+        toast.warning("Tiketi hii tayari imetumika kwa chakula siku hii.");
         return;
       }
       toast.error(error.message);
@@ -179,9 +180,12 @@ function Scanner({ user }) {
   }
 
   function scanPayload(payload) {
-    if (isAdmin && mode === "booth" && selectedBoothId) return { ...payload, boothId: selectedBoothId };
-    return payload;
+    const withDay = { ...payload, scanDay };
+    if (isAdmin && mode === "booth" && selectedBoothId) return { ...withDay, boothId: selectedBoothId };
+    return withDay;
   }
+
+  const allowedSelectedDay = !lookup || lookup.attendee.attendanceDays?.includes(scanDay);
 
   return (
     <div className="mx-auto grid max-w-5xl gap-5">
@@ -234,8 +238,17 @@ function Scanner({ user }) {
             <div className="grid content-start gap-4">
               <div className="rounded-lg border border-white/15 bg-white/5 p-4">
                 <p className="mb-3 text-sm font-medium text-white/70">
-                  {mode === "food" ? "Mode ya chakula itathibitisha tiketi mara moja." : "Mode ya banda itahifadhi ziara na survey ya mshiriki."}
+                  {mode === "food" ? "Mode ya chakula itathibitisha tiketi mara moja kwa siku uliyochagua." : "Mode ya banda itahifadhi ziara na survey kwa siku uliyochagua."}
                 </p>
+                <Field className="mb-3" label="Siku ya kuscan">
+                  <SelectInput value={scanDay} onChange={(e) => {
+                    setScanDay(e.target.value);
+                    setLookup(null);
+                  }}>
+                    <option value="2026-10-24">24 October</option>
+                    <option value="2026-10-25">25 October</option>
+                  </SelectInput>
+                </Field>
                 {requiresBoothChoice ? (
                   <Field className="mb-3" label="Banda la kuscan">
                     <SelectInput value={selectedBoothId} onChange={(e) => setSelectedBoothId(e.target.value)}>
@@ -262,19 +275,26 @@ function Scanner({ user }) {
                     <span className="rounded-md bg-secondary px-2 py-1 text-sm font-black text-primary">{lookup.attendee.ticketCode}</span>
                   </div>
                   <span>{lookup.attendee.district}, {lookup.attendee.region}</span>
+                  <div className="grid gap-1 text-sm text-muted-foreground">
+                    <span>Siku alizochagua: <strong className="text-foreground">{formatAttendanceDays(lookup.attendee.attendanceDays)}</strong></span>
+                    <span>Siku ya scan: <strong className="text-foreground">{formatEventDay(scanDay)}</strong></span>
+                  </div>
+                  {!allowedSelectedDay ? (
+                    <Badge tone="warn">Tiketi hii hairuhusiwi kwa siku hii</Badge>
+                  ) : null}
                   {mode === "food" ? (
                     <>
                       <Badge tone={lookup.foodClaim ? "warn" : "ok"}>
-                        {lookup.foodClaim ? `Chakula kimetumika · ${new Date(lookup.foodClaim.claimedAt).toLocaleString()}` : "Chakula bado hakijatumika"}
+                        {lookup.foodClaim ? `Chakula kimetumika ${formatEventDay(scanDay)} · ${new Date(lookup.foodClaim.claimedAt).toLocaleString()}` : `Chakula cha ${formatEventDay(scanDay)} bado hakijatumika`}
                       </Badge>
-                      <Button disabled={Boolean(lookup.foodClaim) || loading === "food"} onClick={claimFood}>
+                      <Button disabled={!allowedSelectedDay || Boolean(lookup.foodClaim) || loading === "food"} onClick={claimFood}>
                         {loading === "food" ? <Spinner /> : lookup.foodClaim ? <CheckCircle2 size={18} /> : <Utensils size={18} />}
-                        {lookup.foodClaim ? "Chakula tayari kimethibitishwa" : "Thibitisha chakula"}
+                        {lookup.foodClaim ? "Chakula tayari kimethibitishwa" : `Thibitisha chakula ${formatEventDay(scanDay)}`}
                       </Button>
                     </>
                   ) : (
                     <>
-                      <Badge tone={lookup.currentBoothVisit ? "warn" : "neutral"}>{lookup.currentBoothVisit ? "Tiketi tayari imescan kwenye banda hili" : "Tayari kwa ziara ya banda"}</Badge>
+                      <Badge tone={lookup.currentBoothVisit ? "warn" : "neutral"}>{lookup.currentBoothVisit ? `Tiketi tayari imescan kwenye banda hili ${formatEventDay(scanDay)}` : `Tayari kwa ziara ya banda ${formatEventDay(scanDay)}`}</Badge>
                     </>
                   )}
                 </div>
@@ -305,7 +325,7 @@ function Scanner({ user }) {
               <TextInput value={visit.question} onChange={(e) => setVisit({ ...visit, question: e.target.value })} placeholder="Hiari" />
             </Field>
           </div>
-          <Button disabled={Boolean(lookup.currentBoothVisit) || loading === "visit" || (requiresBoothChoice && !selectedBoothId)} onClick={saveVisit}>{loading === "visit" ? <Spinner /> : <Building2 size={18} />} {lookup.currentBoothVisit ? "Tayari imetumika" : "Hifadhi ziara ya banda"}</Button>
+          <Button disabled={!allowedSelectedDay || Boolean(lookup.currentBoothVisit) || loading === "visit" || (requiresBoothChoice && !selectedBoothId)} onClick={saveVisit}>{loading === "visit" ? <Spinner /> : <Building2 size={18} />} {lookup.currentBoothVisit ? "Tayari imetumika" : `Hifadhi ziara ya banda ${formatEventDay(scanDay)}`}</Button>
           </CardContent>
         </Card>
       ) : null}
@@ -321,5 +341,24 @@ function roleLabels(user) {
   const labels = { admin: "Admin", exhibitor: "Banda", food: "Chakula" };
   const roles = user?.roles?.length ? user.roles : [user?.role].filter(Boolean);
   return roles.map((role) => labels[role] || role).join(" · ");
+}
+
+function defaultScanDay() {
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Dar_es_Salaam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+  return ["2026-10-24", "2026-10-25"].includes(today) ? today : "2026-10-24";
+}
+
+function formatEventDay(day) {
+  return day === "2026-10-25" ? "25 October" : "24 October";
+}
+
+function formatAttendanceDays(days = []) {
+  if (days.length === 2) return "24 & 25 October";
+  return formatEventDay(days[0]);
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, Camera, CheckCircle2, Search, Utensils } from "lucide-react";
+import { Building2, Camera, CheckCircle2, ClipboardList, Search, Utensils, X } from "lucide-react";
 import { RequireAuth } from "../../../components/RequireAuth";
 import { api, post } from "../../../lib/api";
 import { SERVICES } from "../../../lib/regions";
@@ -27,9 +27,10 @@ function Scanner({ user }) {
   const [lookup, setLookup] = useState(null);
   const [loading, setLoading] = useState("");
   const [usedDialog, setUsedDialog] = useState(null);
+  const [surveyOpen, setSurveyOpen] = useState(false);
   const [camera, setCamera] = useState(false);
   const [mode, setMode] = useState(canScanFood ? "food" : "booth");
-  const [visit, setVisit] = useState({ service: SERVICES[0], satisfaction: 3, question: "" });
+  const [visit, setVisit] = useState(defaultVisit());
   const [booths, setBooths] = useState([]);
   const [selectedBoothId, setSelectedBoothId] = useState("");
   const [scanDay, setScanDay] = useState(defaultScanDay());
@@ -125,6 +126,10 @@ function Scanner({ user }) {
     try {
       const result = await post("/exhibitor/scans/lookup", scanPayload({ ticketCode: code }));
       setLookup(result);
+      setVisit(defaultVisit());
+      if (mode === "booth" && result.attendee.attendanceDays?.includes(scanDay) && !result.currentBoothVisit) {
+        setSurveyOpen(true);
+      }
       toast.success(`Tiketi sahihi: ${result.attendee.name}`);
     } catch (error) {
       toast.error(error.message);
@@ -142,6 +147,7 @@ function Scanner({ user }) {
     try {
       const result = await post("/exhibitor/scans/visit", scanPayload({ ticketCode, ...visit }));
       toast.success(`Visit saved at ${new Date(result.visit.createdAt).toLocaleTimeString()}`);
+      setSurveyOpen(false);
       await lookupTicket(ticketCode);
     } catch (error) {
       if (error.status === 409) {
@@ -177,6 +183,7 @@ function Scanner({ user }) {
     if (nextMode === "food" && !canScanFood) return;
     if (nextMode === "booth" && !canScanBooth) return;
     setMode(nextMode);
+    setSurveyOpen(false);
   }
 
   function scanPayload(payload) {
@@ -197,6 +204,19 @@ function Scanner({ user }) {
             <Button className="mt-5 w-full" onClick={() => setUsedDialog(null)}>Sawa</Button>
           </div>
         </div>
+      ) : null}
+      {surveyOpen && lookup && mode === "booth" ? (
+        <BoothSurveySheet
+          attendee={lookup.attendee}
+          boothName={boothName || "banda ulilochagua"}
+          disabled={!allowedSelectedDay || Boolean(lookup.currentBoothVisit) || loading === "visit" || (requiresBoothChoice && !selectedBoothId)}
+          loading={loading === "visit"}
+          scanDay={scanDay}
+          setVisit={setVisit}
+          visit={visit}
+          onClose={() => setSurveyOpen(false)}
+          onSave={saveVisit}
+        />
       ) : null}
       <Card className="overflow-hidden border-0 bg-event-ink text-white">
         <CardContent className="grid gap-5 p-5 sm:p-6">
@@ -295,6 +315,11 @@ function Scanner({ user }) {
                   ) : (
                     <>
                       <Badge tone={lookup.currentBoothVisit ? "warn" : "neutral"}>{lookup.currentBoothVisit ? `Tiketi tayari imescan kwenye banda hili ${formatEventDay(scanDay)}` : `Tayari kwa ziara ya banda ${formatEventDay(scanDay)}`}</Badge>
+                      {!lookup.currentBoothVisit && allowedSelectedDay ? (
+                        <Button onClick={() => setSurveyOpen(true)} variant="secondary">
+                          <ClipboardList size={18} /> Fungua survey ya banda
+                        </Button>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -307,28 +332,75 @@ function Scanner({ user }) {
       {lookup && mode === "booth" ? (
         <Card>
           <CardContent className="grid gap-5 p-5 sm:p-6">
-          <PageHeader title="Hifadhi ziara ya banda" description={`Rekodi huduma aliyopata ${lookup.attendee.name} kwenye ${boothName || "banda ulilochagua"}.`} />
-          <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Huduma">
-              <SelectInput value={visit.service} onChange={(e) => setVisit({ ...visit, service: e.target.value })}>
-                {SERVICES.map((service) => <option key={service}>{service}</option>)}
-              </SelectInput>
-            </Field>
-            <Field label="Kuridhika">
-              <SelectInput value={visit.satisfaction} onChange={(e) => setVisit({ ...visit, satisfaction: Number(e.target.value) })}>
-                <option value={1}>Hajaridhika</option>
-                <option value={2}>Wastani</option>
-                <option value={3}>Ameridhika</option>
-              </SelectInput>
-            </Field>
-            <Field label="Swali lake kuu">
-              <TextInput value={visit.question} onChange={(e) => setVisit({ ...visit, question: e.target.value })} placeholder="Hiari" />
-            </Field>
+          <PageHeader title="Survey ya banda" description={`Baada ya QR kuwa sahihi, fungua survey umuulize ${lookup.attendee.name} maswali mafupi kisha uhifadhi ziara ya ${boothName || "banda ulilochagua"}.`} />
+          <div className="rounded-md border bg-secondary/40 p-4 text-sm text-muted-foreground">
+            Survey itafunguka kama action sheet baada ya scan kufanikiwa. Majibu yataonekana kwenye historia ya scans na CSV export.
           </div>
-          <Button disabled={!allowedSelectedDay || Boolean(lookup.currentBoothVisit) || loading === "visit" || (requiresBoothChoice && !selectedBoothId)} onClick={saveVisit}>{loading === "visit" ? <Spinner /> : <Building2 size={18} />} {lookup.currentBoothVisit ? "Tayari imetumika" : `Hifadhi ziara ya banda ${formatEventDay(scanDay)}`}</Button>
+          <Button disabled={!allowedSelectedDay || Boolean(lookup.currentBoothVisit) || (requiresBoothChoice && !selectedBoothId)} onClick={() => setSurveyOpen(true)}>
+            <ClipboardList size={18} /> {lookup.currentBoothVisit ? "Survey tayari imehifadhiwa" : `Fungua survey ${formatEventDay(scanDay)}`}
+          </Button>
           </CardContent>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+function BoothSurveySheet({ attendee, boothName, disabled, loading, scanDay, visit, setVisit, onClose, onSave }) {
+  const answeredCount = SURVEY_QUESTIONS.filter((question) => visit.answers[question.id]?.trim()).length;
+
+  function updateAnswer(id, answer) {
+    const answers = { ...visit.answers, [id]: answer };
+    setVisit({
+      service: answers.service || "",
+      satisfaction: Number.parseInt(answers.satisfaction || "3", 10),
+      question: buildSurveySummary(answers),
+      surveyAnswers: buildSurveyAnswers(answers),
+      answers
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/50 p-0 sm:items-center sm:p-4">
+      <div className="max-h-[92vh] w-full overflow-hidden rounded-t-lg bg-card text-card-foreground shadow-2xl sm:mx-auto sm:max-w-2xl sm:rounded-lg">
+        <div className="flex items-start justify-between gap-4 border-b p-4 sm:p-5">
+          <div>
+            <div className="mb-2 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase text-primary">Survey ya banda</div>
+            <h2 className="text-xl font-bold tracking-normal">Muulize mshiriki maswali haya</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{attendee.name} · {boothName} · {formatEventDay(scanDay)}</p>
+          </div>
+          <button className="grid size-9 shrink-0 place-items-center rounded-md border hover:bg-secondary" onClick={onClose} type="button" aria-label="Funga survey">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="grid max-h-[60vh] gap-4 overflow-y-auto p-4 sm:p-5">
+          {SURVEY_QUESTIONS.map((question, index) => (
+            <div className="grid gap-2 rounded-md border bg-background p-3" key={question.id}>
+              <label className="text-sm font-semibold text-foreground">{index + 1}. {question.label}</label>
+              {question.type === "select" ? (
+                <SelectInput value={visit.answers[question.id] || ""} onChange={(event) => updateAnswer(question.id, event.target.value)}>
+                  <option value="">Chagua jibu</option>
+                  {question.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                </SelectInput>
+              ) : (
+                <textarea
+                  className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                  value={visit.answers[question.id] || ""}
+                  onChange={(event) => updateAnswer(question.id, event.target.value)}
+                  placeholder={question.placeholder || "Andika jibu hapa"}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-3 border-t bg-card p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:p-5">
+          <p className="text-sm text-muted-foreground">{answeredCount}/{SURVEY_QUESTIONS.length} maswali yamejibiwa</p>
+          <Button variant="secondary" onClick={onClose} type="button">Baadaye</Button>
+          <Button disabled={disabled || loading} onClick={onSave} type="button">
+            {loading ? <Spinner /> : <Building2 size={18} />} Hifadhi survey na ziara
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -360,5 +432,70 @@ function formatEventDay(day) {
 function formatAttendanceDays(days = []) {
   if (days.length === 2) return "24 & 25 October";
   return formatEventDay(days[0]);
+}
+
+const SURVEY_QUESTIONS = [
+  {
+    id: "service",
+    label: "Ni huduma au fursa gani imemvutia zaidi kwenye banda hili?",
+    type: "select",
+    options: SERVICES
+  },
+  {
+    id: "satisfaction",
+    label: "Ameridhika kiasi gani na maelezo aliyopata?",
+    type: "select",
+    options: ["1 - Hajaridhika", "2 - Wastani", "3 - Ameridhika"]
+  },
+  {
+    id: "understanding",
+    label: "Ameelewa huduma/fursa iliyotolewa?",
+    type: "select",
+    options: ["Ndiyo, ameelewa vizuri", "Ameelewa kwa kiasi", "Bado anahitaji maelezo zaidi"]
+  },
+  {
+    id: "supportNeeded",
+    label: "Ni msaada gani au taarifa gani zaidi anahitaji?",
+    type: "textarea",
+    placeholder: "Mfano: mawasiliano, mafunzo, bei, usajili, au hatua inayofuata"
+  },
+  {
+    id: "followUp",
+    label: "Angependa kufuatiliwa baada ya tukio?",
+    type: "select",
+    options: ["Ndiyo", "Hapana", "Atafikiria kwanza"]
+  },
+  {
+    id: "notes",
+    label: "Maoni mengine kutoka kwa mshiriki",
+    type: "textarea",
+    placeholder: "Hiari"
+  }
+];
+
+function defaultVisit() {
+  const answers = { service: SERVICES[0], satisfaction: "3 - Ameridhika" };
+  return {
+    service: answers.service,
+    satisfaction: 3,
+    question: buildSurveySummary(answers),
+    surveyAnswers: buildSurveyAnswers(answers),
+    answers
+  };
+}
+
+function buildSurveyAnswers(answers) {
+  return SURVEY_QUESTIONS.map((question) => ({
+    id: question.id,
+    question: question.label,
+    answer: answers[question.id] || ""
+  })).filter((item) => item.answer.trim());
+}
+
+function buildSurveySummary(answers) {
+  return buildSurveyAnswers(answers)
+    .map((item) => `${item.question}: ${item.answer}`)
+    .join(" | ")
+    .slice(0, 1000);
 }
 

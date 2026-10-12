@@ -18,7 +18,7 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
 
     const { rows } = await pool.query(
       `WITH scan_rows AS (
-        SELECT 'booth' AS type, visits.id, visits.service, visits.satisfaction, visits.question, visits.created_at, visits.scan_day,
+        SELECT 'booth' AS type, visits.id, visits.service, visits.satisfaction, visits.question, visits.survey_answers, visits.created_at, visits.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 booths.name AS booth_name,
                 users.name AS scanned_by
@@ -28,7 +28,7 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
          JOIN users ON users.id = visits.scanned_by_user_id
          ${visitWhere}
          UNION ALL
-         SELECT 'food' AS type, food_claims.id, NULL AS service, NULL AS satisfaction, NULL AS question, food_claims.created_at, food_claims.scan_day,
+         SELECT 'food' AS type, food_claims.id, NULL AS service, NULL AS satisfaction, NULL AS question, '[]'::jsonb AS survey_answers, food_claims.created_at, food_claims.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 'Food desk' AS booth_name,
                 users.name AS scanned_by
@@ -57,7 +57,7 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
     const { rows } = await pool.query(
       `SELECT 'booth' AS type, visits.created_at, visits.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
-              booths.name AS booth_name, users.name AS scanned_by, visits.service, visits.satisfaction, visits.question
+              booths.name AS booth_name, users.name AS scanned_by, visits.service, visits.satisfaction, visits.question, visits.survey_answers
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
        JOIN booths ON booths.id = visits.booth_id
@@ -65,7 +65,7 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        ${visitWhere}
        UNION ALL
        SELECT 'food' AS type, food_claims.created_at, food_claims.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
-              'Food desk' AS booth_name, users.name AS scanned_by, NULL AS service, NULL AS satisfaction, NULL AS question
+              'Food desk' AS booth_name, users.name AS scanned_by, NULL AS service, NULL AS satisfaction, NULL AS question, '[]'::jsonb AS survey_answers
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
        JOIN users ON users.id = food_claims.claimed_by_user_id
@@ -73,7 +73,10 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        ORDER BY created_at DESC`,
       params
     );
-    sendCsv(res, "scans.csv", ["type", "scan_day", "created_at", "attendee_name", "ticket_code", "booth_name", "scanned_by", "service", "satisfaction", "question"], rows);
+    sendCsv(res, "scans.csv", ["type", "scan_day", "created_at", "attendee_name", "ticket_code", "booth_name", "scanned_by", "service", "satisfaction", "question", "survey_answers"], rows.map((row) => ({
+      ...row,
+      survey_answers: JSON.stringify(row.survey_answers || [])
+    })));
   } catch (error) {
     next(error);
   }

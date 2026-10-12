@@ -18,7 +18,7 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
       [attendee.id]
     );
     const { rows: visitRows } = await pool.query(
-      `SELECT visits.created_at, visits.service, visits.satisfaction, visits.question, booths.name AS booth_name,
+      `SELECT visits.created_at, visits.service, visits.satisfaction, visits.question, visits.survey_answers, booths.name AS booth_name,
               visits.scanned_by_user_id, visits.booth_id, visits.scan_day
        FROM visits
        JOIN booths ON booths.id = visits.booth_id
@@ -46,6 +46,7 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
         service: row.service,
         satisfaction: row.satisfaction,
         question: row.question,
+        surveyAnswers: row.survey_answers || [],
         createdAt: row.created_at
       })),
       permissions: {
@@ -82,8 +83,8 @@ exhibitorRouter.post("/scans/visit", validate(visitSchema), async (req, res, nex
 
     try {
       const { rows } = await pool.query(
-        `INSERT INTO visits (attendee_id, booth_id, scanned_by_user_id, scan_day, service, satisfaction, question)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO visits (attendee_id, booth_id, scanned_by_user_id, scan_day, service, satisfaction, question, survey_answers)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
         [
           attendee.id,
@@ -92,7 +93,8 @@ exhibitorRouter.post("/scans/visit", validate(visitSchema), async (req, res, nex
           req.validated.scanDay,
           req.validated.service || null,
           req.validated.satisfaction || null,
-          req.validated.question || null
+          req.validated.question || null,
+          JSON.stringify(req.validated.surveyAnswers || [])
         ]
       );
       res.status(201).json({ ok: true, visit: { id: rows[0].id, createdAt: rows[0].created_at } });
@@ -171,7 +173,7 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
               attendees.name AS attendee_name, attendees.ticket_code,
               booths.name AS booth_name,
               users.name AS scanned_by,
-              visits.service, visits.satisfaction, visits.question
+              visits.service, visits.satisfaction, visits.question, visits.survey_answers
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
        JOIN booths ON booths.id = visits.booth_id
@@ -182,7 +184,7 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
               attendees.name AS attendee_name, attendees.ticket_code,
               'Food desk' AS booth_name,
               users.name AS scanned_by,
-              NULL AS service, NULL AS satisfaction, NULL AS question
+              NULL AS service, NULL AS satisfaction, NULL AS question, '[]'::jsonb AS survey_answers
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
        JOIN users ON users.id = food_claims.claimed_by_user_id

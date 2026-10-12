@@ -72,13 +72,39 @@ function Scans({ user }) {
             { key: "type", label: "Aina", render: (scan) => <Badge tone={scan.type === "food" ? "warn" : "neutral"}>{scan.type === "food" ? "Chakula" : "Banda"}</Badge> },
             { key: "scan_day", label: "Siku", render: (scan) => <Badge tone="neutral">{formatEventDay(scan.scan_day)}</Badge> },
             { key: "booth", label: "Banda/eneo", render: (scan) => <Badge tone="neutral">{scan.booth_name}</Badge> },
-            { key: "survey", label: "Utafiti", render: (scan) => <>{scan.service || "-"}<div className="text-sm text-muted-foreground">Kuridhika: {scan.satisfaction || "-"}</div>{scan.question ? <div>{scan.question}</div> : null}</> },
+            { key: "survey", label: "Utafiti", render: (scan) => <SurveySummary scan={scan} /> },
             { key: "scanned_by", label: "Aliyescan" },
             { key: "created_at", label: "Muda", render: (scan) => new Date(scan.created_at).toLocaleString() }
           ]}
         />
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function SurveySummary({ scan }) {
+  const answers = Array.isArray(scan.survey_answers) ? scan.survey_answers : [];
+  if (!answers.length) {
+    return (
+      <>
+        {scan.service || "-"}
+        <div className="text-sm text-muted-foreground">Kuridhika: {scan.satisfaction || "-"}</div>
+        {scan.question ? <div className="line-clamp-2 text-xs text-muted-foreground">{scan.question}</div> : null}
+      </>
+    );
+  }
+
+  return (
+    <div className="grid gap-1">
+      <strong className="text-sm">{scan.service || "Survey"}</strong>
+      <div className="text-sm text-muted-foreground">Kuridhika: {scan.satisfaction || "-"}</div>
+      {answers.slice(0, 2).map((answer) => (
+        <div className="text-xs text-muted-foreground" key={answer.id}>
+          <span className="font-semibold text-foreground">{answer.question}</span>: {answer.answer}
+        </div>
+      ))}
+      {answers.length > 2 ? <span className="text-xs font-semibold text-primary">+{answers.length - 2} majibu zaidi</span> : null}
     </div>
   );
 }

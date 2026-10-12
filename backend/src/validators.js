@@ -49,7 +49,12 @@ export const visitSchema = z.object({
   scanDay: eventDaySchema,
   service: z.string().trim().max(160).optional().nullable(),
   satisfaction: z.coerce.number().int().min(1).max(3).optional().nullable(),
-  question: z.string().trim().max(500).optional().nullable()
+  question: z.string().trim().max(1000).optional().nullable(),
+  surveyAnswers: z.array(z.object({
+    id: z.string().trim().min(1).max(80),
+    question: z.string().trim().min(1).max(240),
+    answer: z.string().trim().max(800)
+  })).max(12).optional().default([])
 });
 
 export const foodSchema = z.object({

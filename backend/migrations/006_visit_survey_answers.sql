@@ -1,0 +1,2 @@
+ALTER TABLE visits
+ADD COLUMN IF NOT EXISTS survey_answers JSONB NOT NULL DEFAULT '[]'::jsonb;

@@ -22,7 +22,7 @@ function Attendees() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailLoadingId, setDetailLoadingId] = useState(null);
   const toast = useToast();
 
   async function load(page = pagination.page, query = q) {
@@ -62,14 +62,14 @@ function Attendees() {
   }
 
   async function viewAttendee(attendee) {
-    setDetailLoading(true);
+    setDetailLoadingId(attendee.id);
     try {
       const data = await api(`/admin/attendees/${attendee.id}`);
       setDetail(data);
     } catch (error) {
       toast.error(error.message);
     } finally {
-      setDetailLoading(false);
+      setDetailLoadingId(null);
     }
   }
 
@@ -139,8 +139,8 @@ function Attendees() {
             { key: "days", label: "Siku", render: (a) => <Badge tone="neutral">{formatAttendanceDays(a.attendanceDays)}</Badge> },
             { key: "status", label: "Hali", render: (a) => <div className="grid gap-1.5"><Badge tone="neutral">{a.visitCount} ziara</Badge><Badge tone={a.foodClaimCount ? "ok" : "warn"}>{a.foodClaimCount ? `${a.foodClaimCount} chakula` : "Chakula bado"}</Badge></div> },
             { key: "actions", label: "", render: (a) => (
-              <Button className="h-9 px-3" disabled={detailLoading} onClick={() => viewAttendee(a)} type="button" variant="secondary">
-                {detailLoading ? <Spinner /> : <Eye size={15} />} View
+              <Button className="h-9 px-3" disabled={Boolean(detailLoadingId)} onClick={() => viewAttendee(a)} type="button" variant="secondary">
+                {detailLoadingId === a.id ? <Spinner /> : <Eye size={15} />} View
               </Button>
             ) }
           ]}

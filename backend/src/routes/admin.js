@@ -2,7 +2,7 @@ import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { hashPassword, hasRole, normalizeRoles, requireAuth, requireRole } from "../auth.js";
 import { pool } from "../db.js";
-import { sendStaffCredentialsEmail } from "../email.js";
+import { buildTicketEmailTemplate, sendStaffCredentialsEmail } from "../email.js";
 import { createUserSchema, updateUserSchema, validate } from "../validators.js";
 
 export const adminRouter = Router();
@@ -228,6 +228,75 @@ adminRouter.get("/attendees", async (req, res, next) => {
       params
     );
     res.json({ attendees: rows.map(mapAttendeeListRow), pagination: paginationMeta({ page, pageSize, total: rows[0]?.total_count || 0 }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/attendees/:id", requireAuth, requireRole("admin"), async (req, res, next) => {
+  try {
+    const attendeeResult = await pool.query(
+      `SELECT attendees.*,
+              count(DISTINCT visits.id)::int AS visit_count,
+              count(DISTINCT food_claims.id)::int AS food_claim_count
+       FROM attendees
+       LEFT JOIN visits ON visits.attendee_id = attendees.id
+       LEFT JOIN food_claims ON food_claims.attendee_id = attendees.id
+       WHERE attendees.id = $1
+       GROUP BY attendees.id`,
+      [req.params.id]
+    );
+    const attendee = attendeeResult.rows[0];
+    if (!attendee) return res.status(404).json({ error: "not_found", message: "Attendee not found" });
+
+    const [visits, foodClaims, emails] = await Promise.all([
+      pool.query(
+        `SELECT visits.id, visits.scan_day, visits.service, visits.satisfaction, visits.question, visits.survey_answers, visits.created_at,
+                booths.name AS booth_name,
+                users.name AS scanned_by
+         FROM visits
+         JOIN booths ON booths.id = visits.booth_id
+         JOIN users ON users.id = visits.scanned_by_user_id
+         WHERE visits.attendee_id = $1
+         ORDER BY visits.created_at DESC`,
+        [attendee.id]
+      ),
+      pool.query(
+        `SELECT food_claims.id, food_claims.scan_day, food_claims.created_at,
+                users.name AS claimed_by
+         FROM food_claims
+         JOIN users ON users.id = food_claims.claimed_by_user_id
+         WHERE food_claims.attendee_id = $1
+         ORDER BY food_claims.created_at DESC`,
+        [attendee.id]
+      ),
+      pool.query(
+        `SELECT id, to_email, template, resend_message_id, status, error, created_at
+         FROM email_logs
+         WHERE attendee_id = $1
+         ORDER BY created_at DESC`,
+        [attendee.id]
+      )
+    ]);
+
+    const ticket = await buildTicketEmailTemplate({
+      attendee,
+      ticketCode: attendee.ticket_code,
+      inlineImages: true
+    });
+
+    res.json({
+      attendee: mapAttendeeListRow(attendee),
+      visits: visits.rows,
+      foodClaims: foodClaims.rows,
+      emails: emails.rows,
+      ticketEmail: {
+        html: ticket.html,
+        ticketSvg: ticket.ticketSvg,
+        filename: `${attendee.ticket_code}-ticket.svg`,
+        subject: `${ticket.eventName} ticket: ${attendee.ticket_code}`
+      }
+    });
   } catch (error) {
     next(error);
   }

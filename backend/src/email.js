@@ -15,7 +15,7 @@ export async function makeQrPng(ticketCode) {
   });
 }
 
-export async function sendTicketEmail({ attendee, ticketCode }) {
+export async function buildTicketEmailTemplate({ attendee, ticketCode, inlineImages = false }) {
   const qrBuffer = await makeQrPng(ticketCode);
   const qrBase64 = qrBuffer.toString("base64");
   const logoBase64 = logoBuffer.toString("base64");
@@ -25,6 +25,8 @@ export async function sendTicketEmail({ attendee, ticketCode }) {
   const attendanceDaysText = formatAttendanceDays(attendee.attendance_days);
   const safeAttendanceDays = escapeHtml(attendanceDaysText);
   const ticketSvg = makeTicketSvg({ eventName, attendeeName, safeTicketCode, attendanceDaysText, qrBase64, logoBase64 });
+  const logoSrc = inlineImages ? `data:image/png;base64,${logoBase64}` : "cid:chimbo-logo";
+  const qrSrc = inlineImages ? `data:image/png;base64,${qrBase64}` : "cid:ticket-qr";
   const html = `
     <div style="margin:0;padding:0;background:#f4f7f7;font-family:Arial,Helvetica,sans-serif;color:#142326;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f7f7;margin:0;padding:28px 12px;">
@@ -36,7 +38,7 @@ export async function sendTicketEmail({ attendee, ticketCode }) {
                   <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                     <tr>
                       <td style="width:74px;vertical-align:top;padding:0 18px 0 0;">
-                        <img alt="Chimbo logo" src="cid:chimbo-logo" width="62" height="62" style="display:block;width:62px;height:62px;border:0;border-radius:12px;background:#ffffff;" />
+                        <img alt="Chimbo logo" src="${logoSrc}" width="62" height="62" style="display:block;width:62px;height:62px;border:0;border-radius:12px;background:#ffffff;" />
                       </td>
                       <td style="vertical-align:top;">
                         <p style="margin:0 0 8px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#f6c453;font-weight:700;">Tiketi imethibitishwa</p>
@@ -74,7 +76,7 @@ export async function sendTicketEmail({ attendee, ticketCode }) {
                       </td>
                       <td align="center" style="vertical-align:top;width:190px;padding:0 0 20px;">
                         <div style="border:1px solid #dfe8e8;border-radius:18px;background:#ffffff;padding:12px;">
-                          <img alt="QR code for ${safeTicketCode}" src="cid:ticket-qr" width="166" height="166" style="display:block;width:166px;height:166px;border:0;" />
+                          <img alt="QR code for ${safeTicketCode}" src="${qrSrc}" width="166" height="166" style="display:block;width:166px;height:166px;border:0;" />
                         </div>
                         <p style="margin:10px 0 0;font-size:12px;line-height:1.4;color:#6b7b7c;">Scan QR hii langoni au kwenye banda.</p>
                       </td>
@@ -97,6 +99,21 @@ export async function sendTicketEmail({ attendee, ticketCode }) {
       </table>
     </div>
   `;
+
+  return {
+    html,
+    ticketSvg,
+    qrBuffer,
+    qrBase64,
+    logoBase64,
+    ticketCode,
+    eventName: config.eventName,
+    attendanceDaysText
+  };
+}
+
+export async function sendTicketEmail({ attendee, ticketCode }) {
+  const { html, ticketSvg, qrBuffer } = await buildTicketEmailTemplate({ attendee, ticketCode });
 
   if (!resend) {
     return { status: "skipped", resendMessageId: null, error: "RESEND_API_KEY is not configured" };

@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import { generateTicketCode } from "../codegen.js";
 import { pool, withTransaction } from "../db.js";
 import { sendTicketEmail } from "../email.js";
+import { sendRegistrationSms } from "../sms.js";
 import { registrationSchema, validate } from "../validators.js";
 
 export const publicRouter = Router();
@@ -15,6 +16,7 @@ publicRouter.post(
     try {
       const attendee = await createAttendee(req.validated);
       const emailResult = await sendTicketEmail({ attendee, ticketCode: attendee.ticket_code });
+      const smsResult = await sendRegistrationSms({ attendee, ticketCode: attendee.ticket_code });
 
       await pool.query(
         `INSERT INTO email_logs (attendee_id, to_email, template, resend_message_id, status, error)
@@ -22,10 +24,17 @@ publicRouter.post(
         [attendee.id, attendee.email, emailResult.resendMessageId, emailResult.status, emailResult.error]
       );
 
+      await pool.query(
+        `INSERT INTO sms_logs (attendee_id, to_phone, template, provider_message_id, status, error, response)
+         VALUES ($1, $2, 'registration_ticket_sms', $3, $4, $5, $6)`,
+        [attendee.id, attendee.phone, smsResult.messageId, smsResult.status, smsResult.error, smsResult.response]
+      );
+
       res.status(201).json({
         ok: true,
         attendee: publicAttendee(attendee),
-        email: { status: emailResult.status }
+        email: { status: emailResult.status },
+        sms: { status: smsResult.status }
       });
     } catch (error) {
       next(error);

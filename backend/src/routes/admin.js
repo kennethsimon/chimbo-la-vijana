@@ -93,17 +93,30 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       totalVisits,
       totalExhibitors,
       totalFoodUsers,
+      smsSentAttendees,
+      emailSentAttendees,
       topBooths,
       recentActivity,
       satisfaction,
       services,
-      districts
+      districts,
+      genderBreakdown,
+      activityBreakdown,
+      regionBreakdown,
+      ageGroups,
+      attendanceDays,
+      registrationTrend,
+      smsStatus,
+      smsDeliveryStatus,
+      emailStatus
     ] = await Promise.all([
       pool.query("SELECT count(*)::int AS n FROM attendees"),
       pool.query("SELECT count(*)::int AS n FROM food_claims"),
       pool.query("SELECT count(*)::int AS n FROM visits"),
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['exhibitor']::TEXT[] AND is_active = true"),
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['food']::TEXT[] AND is_active = true"),
+      pool.query("SELECT count(DISTINCT attendee_id)::int AS n FROM sms_logs WHERE template = 'registration_ticket_sms' AND status = 'sent'"),
+      pool.query("SELECT count(DISTINCT attendee_id)::int AS n FROM email_logs WHERE template = 'registration_ticket' AND status = 'sent'"),
       pool.query(
         `SELECT booths.name, count(visits.id)::int AS visits
          FROM booths
@@ -147,22 +160,133 @@ adminRouter.get("/dashboard", async (req, res, next) => {
          GROUP BY district, region
          ORDER BY count DESC
          LIMIT 5`
+      ),
+      pool.query(
+        `SELECT gender AS label, count(*)::int AS count
+         FROM attendees
+         GROUP BY gender
+         ORDER BY count DESC, gender`
+      ),
+      pool.query(
+        `SELECT activity AS label, count(*)::int AS count
+         FROM attendees
+         GROUP BY activity
+         ORDER BY count DESC, activity
+         LIMIT 8`
+      ),
+      pool.query(
+        `SELECT region AS label, count(*)::int AS count
+         FROM attendees
+         GROUP BY region
+         ORDER BY count DESC, region
+         LIMIT 8`
+      ),
+      pool.query(
+        `SELECT label, count(*)::int AS count
+         FROM (
+           SELECT CASE
+             WHEN age < 18 THEN 'Under 18'
+             WHEN age BETWEEN 18 AND 24 THEN '18-24'
+             WHEN age BETWEEN 25 AND 34 THEN '25-34'
+             WHEN age BETWEEN 35 AND 44 THEN '35-44'
+             ELSE '45+'
+           END AS label,
+           CASE
+             WHEN age < 18 THEN 1
+             WHEN age BETWEEN 18 AND 24 THEN 2
+             WHEN age BETWEEN 25 AND 34 THEN 3
+             WHEN age BETWEEN 35 AND 44 THEN 4
+             ELSE 5
+           END AS sort_order
+           FROM attendees
+         ) grouped
+         GROUP BY label, sort_order
+         ORDER BY sort_order`
+      ),
+      pool.query(
+        `SELECT CASE
+           WHEN attendance_days @> ARRAY['2026-10-24','2026-10-25']::TEXT[] THEN 'Both days'
+           WHEN attendance_days @> ARRAY['2026-10-25']::TEXT[] THEN '25 Oct only'
+           ELSE '24 Oct only'
+         END AS label,
+         count(*)::int AS count
+         FROM attendees
+         GROUP BY label
+         ORDER BY label`
+      ),
+      pool.query(
+        `SELECT label, count
+         FROM (
+           SELECT to_char(date_trunc('day', created_at), 'DD Mon') AS label,
+                  count(*)::int AS count,
+                  date_trunc('day', created_at) AS sort_date
+           FROM attendees
+           GROUP BY date_trunc('day', created_at)
+           ORDER BY sort_date DESC
+           LIMIT 14
+         ) trend
+         ORDER BY sort_date ASC`
+      ),
+      pool.query(
+        `SELECT status AS label, count(*)::int AS count
+         FROM sms_logs
+         WHERE template = 'registration_ticket_sms'
+         GROUP BY status
+         ORDER BY count DESC, status`
+      ),
+      pool.query(
+        `SELECT coalesce(delivery_status_name, delivery_status, 'Pending report') AS label, count(*)::int AS count
+         FROM sms_logs
+         WHERE template = 'registration_ticket_sms' AND status = 'sent'
+         GROUP BY label
+         ORDER BY count DESC, label`
+      ),
+      pool.query(
+        `SELECT status AS label, count(*)::int AS count
+         FROM email_logs
+         WHERE template = 'registration_ticket'
+         GROUP BY status
+         ORDER BY count DESC, status`
       )
     ]);
 
+    const attendeeCount = totalAttendees.rows[0].n;
+    const foodClaimCount = totalFoodClaims.rows[0].n;
     res.json({
       totals: {
-        attendees: totalAttendees.rows[0].n,
-        foodClaims: totalFoodClaims.rows[0].n,
+        attendees: attendeeCount,
+        foodClaims: foodClaimCount,
+        unclaimedFood: Math.max(0, attendeeCount - foodClaimCount),
         visits: totalVisits.rows[0].n,
         exhibitors: totalExhibitors.rows[0].n,
-        foodUsers: totalFoodUsers.rows[0].n
+        foodUsers: totalFoodUsers.rows[0].n,
+        smsSentAttendees: smsSentAttendees.rows[0].n,
+        emailSentAttendees: emailSentAttendees.rows[0].n
       },
       topBooths: topBooths.rows,
       recentActivity: recentActivity.rows,
       satisfaction: satisfaction.rows,
       services: services.rows,
-      districts: districts.rows
+      districts: districts.rows.map((row) => ({ label: `${row.district}, ${row.region}`, count: row.count })),
+      demographics: {
+        gender: genderBreakdown.rows,
+        activity: activityBreakdown.rows,
+        region: regionBreakdown.rows,
+        ageGroups: ageGroups.rows,
+        attendanceDays: attendanceDays.rows
+      },
+      communications: {
+        smsStatus: smsStatus.rows,
+        smsDeliveryStatus: smsDeliveryStatus.rows,
+        emailStatus: emailStatus.rows
+      },
+      operations: {
+        registrationTrend: registrationTrend.rows,
+        foodClaims: [
+          { label: "Claimed", count: foodClaimCount },
+          { label: "Not claimed", count: Math.max(0, attendeeCount - foodClaimCount) }
+        ]
+      }
     });
   } catch (error) {
     next(error);

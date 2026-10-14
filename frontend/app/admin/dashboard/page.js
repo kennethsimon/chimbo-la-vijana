@@ -200,15 +200,19 @@ function TrendBars({ rows = [] }) {
   const max = Math.max(...items.map((row) => row.count), 0);
   if (!items.length) return <EmptyState title="No registrations yet" />;
   return (
-    <div className="grid min-h-64 gap-4">
-      <div className="flex h-56 items-end gap-2 border-b border-l px-2 pb-2 sm:gap-3">
+    <div className="grid gap-4">
+      <div className="flex h-72 items-end gap-2 border-b border-l px-2 pb-2 sm:h-64 sm:gap-3">
         {items.map((row, index) => (
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-2" key={`${row.label}-${index}`}>
-            <div
-              className="w-full rounded-t-md bg-teal-700 transition-all dark:bg-teal-400"
-              style={{ height: `${max ? Math.max(8, (row.count / max) * 100) : 0}%` }}
-              title={`${row.label}: ${row.count}`}
-            />
+          <div className="flex h-full min-w-0 flex-1 flex-col items-center gap-2" key={`${row.label}-${index}`}>
+            <div className="flex min-h-0 w-full flex-1 items-end">
+              <div
+                className="relative w-full rounded-t-md bg-teal-700 transition-all dark:bg-teal-400"
+                style={{ height: `${max ? Math.max(12, (row.count / max) * 100) : 0}%` }}
+                title={`${row.label}: ${row.count}`}
+              >
+                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-foreground">{formatNumber(row.count)}</span>
+              </div>
+            </div>
             <span className="w-full truncate text-center text-[11px] font-medium text-muted-foreground">{row.label}</span>
           </div>
         ))}

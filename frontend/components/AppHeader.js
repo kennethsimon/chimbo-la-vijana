@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, ChevronDown, LayoutDashboard, LogOut, Mail, Menu, QrCode, ScanLine, UserRound, UsersRound, UserRoundCog } from "lucide-react";
+import { Bell, ChevronDown, LayoutDashboard, LogOut, Mail, Menu, MessageSquareText, QrCode, ScanLine, UserRound, UsersRound, UserRoundCog } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { api } from "../lib/api";
 import { BrandMark } from "./BrandMark";
@@ -51,6 +51,7 @@ export function StaffNav({ user, onLogout, compact = false, collapsed = false })
               {!compact && !collapsed ? <p className="px-3 text-xs font-medium uppercase text-muted-foreground">{t("dashboard")}</p> : null}
               <Link className={linkClass("/admin/dashboard")} href="/admin/dashboard" title={t("analytics")}><LayoutDashboard size={iconSize} />{!collapsed ? t("analytics") : null}</Link>
               <Link className={linkClass("/admin/attendees")} href="/admin/attendees" title={t("attendees")}><UsersRound size={iconSize} />{!collapsed ? t("attendees") : null}</Link>
+              <Link className={linkClass("/admin/sms")} href="/admin/sms" title="SMS logs"><MessageSquareText size={iconSize} />{!collapsed ? "SMS logs" : null}</Link>
               <Link className={linkClass("/admin/users")} href="/admin/users" title={t("users")}><UserRoundCog size={iconSize} />{!collapsed ? t("users") : null}</Link>
             </div>
           ) : null}

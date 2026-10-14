@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { hashPassword, hasRole, normalizeRoles, requireAuth, requireRole } from "../auth.js";
 import { pool } from "../db.js";
 import { buildTicketEmailTemplate, sendStaffCredentialsEmail } from "../email.js";
+import { getSmsDeliveryReport } from "../sms.js";
 import { createUserSchema, updateUserSchema, validate } from "../validators.js";
 
 export const adminRouter = Router();
@@ -162,6 +163,84 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       satisfaction: satisfaction.rows,
       services: services.rows,
       districts: districts.rows
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get("/sms-logs", async (req, res, next) => {
+  try {
+    const { page, pageSize, limit, offset } = getPagination(req);
+    const { rows } = await pool.query(
+      `SELECT sms_logs.id, sms_logs.to_phone, sms_logs.template, sms_logs.provider_message_id, sms_logs.status, sms_logs.error,
+              sms_logs.delivery_status, sms_logs.delivery_status_name, sms_logs.delivery_group_name,
+              sms_logs.provider_done_at, sms_logs.created_at,
+              attendees.name AS attendee_name, attendees.ticket_code
+       FROM sms_logs
+       LEFT JOIN attendees ON attendees.id = sms_logs.attendee_id
+       ORDER BY sms_logs.created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    const total = await pool.query("SELECT count(*)::int AS n FROM sms_logs");
+    res.json({
+      smsLogs: rows.map(mapSmsLog),
+      pagination: paginationMeta({ page, pageSize, total: total.rows[0].n })
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/sms-logs/refresh", async (req, res, next) => {
+  try {
+    const { rows: logs } = await pool.query(
+      `SELECT id, provider_message_id
+       FROM sms_logs
+       WHERE provider_message_id IS NOT NULL
+         AND status = 'sent'
+         AND coalesce(delivery_status_name, '') NOT IN ('DELIVERED', 'READ', 'REJECTED', 'UNDELIVERABLE', 'EXPIRED', 'DELETED')
+       ORDER BY created_at DESC
+       LIMIT 100`
+    );
+
+    const results = [];
+    for (const log of logs) {
+      const reportResult = await getSmsDeliveryReport(log.provider_message_id);
+      const report = reportResult.report;
+      if (report) {
+        await pool.query(
+          `UPDATE sms_logs
+           SET delivery_status = $1,
+               delivery_status_name = $2,
+               delivery_group_name = $3,
+               provider_done_at = nullif($4, '')::timestamptz,
+               delivery_response = $5
+           WHERE id = $6`,
+          [
+            report.delivery || null,
+            report.status?.name || report.delivery || null,
+            report.status?.groupName || null,
+            report.doneAt || null,
+            reportResult.response || report,
+            log.id
+          ]
+        );
+      }
+      results.push({
+        id: log.id,
+        messageId: log.provider_message_id,
+        refreshed: Boolean(report),
+        status: report?.status?.name || report?.delivery || reportResult.status,
+        error: reportResult.error
+      });
+    }
+
+    res.json({
+      refreshed: results.filter((result) => result.refreshed).length,
+      checked: results.length,
+      results
     });
   } catch (error) {
     next(error);
@@ -451,6 +530,24 @@ function mapUser(row) {
     boothName: row.booth_name,
     isActive: row.is_active,
     createdAt: row.created_at
+  };
+}
+
+function mapSmsLog(row) {
+  return {
+    id: row.id,
+    toPhone: row.to_phone,
+    template: row.template,
+    providerMessageId: row.provider_message_id,
+    status: row.status,
+    error: row.error,
+    deliveryStatus: row.delivery_status,
+    deliveryStatusName: row.delivery_status_name,
+    deliveryGroupName: row.delivery_group_name,
+    providerDoneAt: row.provider_done_at,
+    createdAt: row.created_at,
+    attendeeName: row.attendee_name,
+    ticketCode: row.ticket_code
   };
 }
 

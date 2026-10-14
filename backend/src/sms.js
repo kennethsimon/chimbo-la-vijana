@@ -66,6 +66,55 @@ export async function sendRegistrationSms({ attendee, ticketCode }) {
   }
 }
 
+export async function getSmsDeliveryReport(messageId) {
+  if (!config.smsApiToken) {
+    return {
+      status: "skipped",
+      error: "SMS_API_TOKEN is not configured",
+      report: null
+    };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const url = new URL(`${config.smsApiBaseUrl.replace(/\/$/, "")}/api/v2/reports`);
+    url.searchParams.set("messageId", messageId);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.smsApiToken}`,
+        Accept: "application/json"
+      },
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: data.message || `SMS report API returned HTTP ${response.status}`,
+        report: data
+      };
+    }
+
+    return {
+      status: "ok",
+      error: null,
+      report: Array.isArray(data.results) ? data.results[0] || null : null,
+      response: data
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error.message || "Failed to fetch SMS delivery report",
+      report: null
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function normalizeSmsPhone(phone) {
   return String(phone).trim().replace(/^\+/, "");
 }

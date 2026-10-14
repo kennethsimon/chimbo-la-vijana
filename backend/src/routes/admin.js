@@ -740,9 +740,12 @@ function sendCsv(res, filename, columns, rows) {
   res.send(csv);
 }
 
-function csvCell(value) {
+const CSV_FORMULA_PREFIX_RE = /^[=+\-@\t\r]/;
+
+export function csvCell(value) {
   if (value === null || value === undefined) return "";
   const text = value instanceof Date ? value.toISOString() : String(value);
-  return `"${text.replaceAll('"', '""')}"`;
+  const safeText = CSV_FORMULA_PREFIX_RE.test(text) ? `'${text}` : text;
+  return `"${safeText.replaceAll('"', '""')}"`;
 }
 

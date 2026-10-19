@@ -1,0 +1,2 @@
+ALTER TABLE attendees
+  ALTER COLUMN email DROP NOT NULL;

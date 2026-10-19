@@ -38,7 +38,7 @@ function Dashboard() {
   const attendeeTotal = Number(totals.attendees || 0);
   const foodRate = percentage(totals.foodClaims, attendeeTotal);
   const smsRate = percentage(totals.smsSentAttendees, attendeeTotal);
-  const emailRate = percentage(totals.emailSentAttendees, attendeeTotal);
+  const emailRate = percentage(totals.emailSentAttendees, Number(totals.attendeesWithEmail || 0));
 
   const communicationRows = useMemo(() => {
     const sms = data?.communications?.smsStatus || [];
@@ -77,7 +77,7 @@ function Dashboard() {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard icon={<UsersRound size={20} />} label="Total attendees" value={attendeeTotal} hint="Registered coupons" />
         <MetricCard icon={<MessageSquareText size={20} />} label="SMS sent rate" value={`${smsRate}%`} hint={`${formatNumber(totals.smsSentAttendees)} sent`} tone="amber" />
-        <MetricCard icon={<Mail size={20} />} label="Email sent rate" value={`${emailRate}%`} hint={`${formatNumber(totals.emailSentAttendees)} tickets`} tone="blue" />
+        <MetricCard icon={<Mail size={20} />} label="Email sent rate" value={`${emailRate}%`} hint={`${formatNumber(totals.emailSentAttendees)} of ${formatNumber(totals.attendeesWithEmail)} opted in`} tone="blue" />
         <MetricCard icon={<Utensils size={20} />} label="Food claim rate" value={`${foodRate}%`} hint={`${formatNumber(totals.unclaimedFood)} unclaimed`} tone="red" />
         <MetricCard icon={<QrCode size={20} />} label="Booth scans" value={totals.visits} hint={`${formatNumber(totals.exhibitors)} exhibitors`} tone="dark" />
       </section>

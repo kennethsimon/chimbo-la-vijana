@@ -15,14 +15,18 @@ publicRouter.post(
   async (req, res, next) => {
     try {
       const attendee = await createAttendee(req.validated);
-      const emailResult = await sendTicketEmail({ attendee, ticketCode: attendee.ticket_code });
+      const emailResult = attendee.email
+        ? await sendTicketEmail({ attendee, ticketCode: attendee.ticket_code })
+        : { status: "not_provided", resendMessageId: null, error: null };
       const smsResult = await sendRegistrationSms({ attendee, ticketCode: attendee.ticket_code });
 
-      await pool.query(
-        `INSERT INTO email_logs (attendee_id, to_email, template, resend_message_id, status, error)
-         VALUES ($1, $2, 'registration_ticket', $3, $4, $5)`,
-        [attendee.id, attendee.email, emailResult.resendMessageId, emailResult.status, emailResult.error]
-      );
+      if (attendee.email) {
+        await pool.query(
+          `INSERT INTO email_logs (attendee_id, to_email, template, resend_message_id, status, error)
+           VALUES ($1, $2, 'registration_ticket', $3, $4, $5)`,
+          [attendee.id, attendee.email, emailResult.resendMessageId, emailResult.status, emailResult.error]
+        );
+      }
 
       await pool.query(
         `INSERT INTO sms_logs (attendee_id, to_phone, template, provider_message_id, status, error, response)
@@ -55,7 +59,7 @@ async function createAttendee(data) {
             ticketCode,
             data.name,
             data.phone,
-            data.email.toLowerCase(),
+            data.email ? data.email.toLowerCase() : null,
             data.age,
             data.gender,
             data.region,

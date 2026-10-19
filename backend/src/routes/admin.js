@@ -94,6 +94,7 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       totalExhibitors,
       totalFoodUsers,
       smsSentAttendees,
+      attendeesWithEmail,
       emailSentAttendees,
       topBooths,
       recentActivity,
@@ -116,6 +117,7 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['exhibitor']::TEXT[] AND is_active = true"),
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['food']::TEXT[] AND is_active = true"),
       pool.query("SELECT count(DISTINCT attendee_id)::int AS n FROM sms_logs WHERE template = 'registration_ticket_sms' AND status = 'sent'"),
+      pool.query("SELECT count(*)::int AS n FROM attendees WHERE email IS NOT NULL"),
       pool.query("SELECT count(DISTINCT attendee_id)::int AS n FROM email_logs WHERE template = 'registration_ticket' AND status = 'sent'"),
       pool.query(
         `SELECT booths.name, count(visits.id)::int AS visits
@@ -261,6 +263,7 @@ adminRouter.get("/dashboard", async (req, res, next) => {
         exhibitors: totalExhibitors.rows[0].n,
         foodUsers: totalFoodUsers.rows[0].n,
         smsSentAttendees: smsSentAttendees.rows[0].n,
+        attendeesWithEmail: attendeesWithEmail.rows[0].n,
         emailSentAttendees: emailSentAttendees.rows[0].n
       },
       topBooths: topBooths.rows,

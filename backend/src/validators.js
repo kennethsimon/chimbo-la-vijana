@@ -18,7 +18,10 @@ const tanzaniaPhoneSchema = z.string()
 export const registrationSchema = z.object({
   name: z.string().trim().min(2).max(120),
   phone: tanzaniaPhoneSchema,
-  email: z.string().trim().email().max(160),
+  email: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? null : value,
+    z.string().trim().email().max(160).nullable().optional()
+  ).transform((value) => value || null),
   age: z.coerce.number().int().min(1).max(119),
   gender: z.string().trim().min(1).max(40),
   region: z.string().trim().min(1).max(120),

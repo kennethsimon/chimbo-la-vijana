@@ -30,6 +30,35 @@ test("registrationSchema rejects invalid email", () => {
   assert.equal(result.success, false);
 });
 
+test("registrationSchema accepts a registration without email", () => {
+  const result = registrationSchema.safeParse({
+    name: "Asha Juma",
+    phone: "0712345678",
+    age: 23,
+    gender: "Mwanamke",
+    region: "Dar es Salaam",
+    district: "Kinondoni",
+    activity: "Mwanafunzi"
+  });
+  assert.equal(result.success, true);
+  assert.equal(result.data.email, null);
+});
+
+test("registrationSchema treats a blank email as not provided", () => {
+  const result = registrationSchema.safeParse({
+    name: "Asha Juma",
+    phone: "0712345678",
+    email: "   ",
+    age: 23,
+    gender: "Mwanamke",
+    region: "Dar es Salaam",
+    district: "Kinondoni",
+    activity: "Mwanafunzi"
+  });
+  assert.equal(result.success, true);
+  assert.equal(result.data.email, null);
+});
+
 test("visitSchema enforces satisfaction range", () => {
   const result = visitSchema.safeParse({
     ticketCode: "CLV-ABC234",

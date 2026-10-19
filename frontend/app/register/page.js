@@ -71,7 +71,9 @@ export default function RegisterPage() {
         ticketCode: result.attendee.ticketCode,
         email: result.attendee.email
       });
-      toast.success(`Tiketi ${result.attendee.ticketCode} imetumwa kwa email.`);
+      toast.success(result.attendee.email
+        ? t("registrationSuccessEmail").replace("{ticketCode}", result.attendee.ticketCode)
+        : t("registrationSuccessSms").replace("{ticketCode}", result.attendee.ticketCode));
       setForm(initialForm);
     } catch (error) {
       toast.error(error.message);
@@ -131,7 +133,7 @@ export default function RegisterPage() {
               {status?.type === "ok" ? (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100">
                   <div className="mb-2 flex items-center gap-2"><CheckCircle2 size={18} /> Umesajiliwa kikamilifu.</div>
-                  Tiketi yako ni <span className="rounded-md bg-card px-2 py-1 font-black text-primary">{status.ticketCode}</span>. Angalia email: {status.email}
+                  Tiketi yako ni <span className="rounded-md bg-card px-2 py-1 font-black text-primary">{status.ticketCode}</span>. {status.email ? `${t("checkEmail")}: ${status.email}` : t("checkSms")}
                 </div>
               ) : null}
 
@@ -139,7 +141,7 @@ export default function RegisterPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label={t("fullName")}><TextInput value={form.name} onChange={(e) => update("name", e.target.value)} required /></Field>
                   <Field label={t("phone")}><TextInput inputMode="tel" pattern={TANZANIA_PHONE_PATTERN} placeholder="0687615616" title="Tumia namba ya Tanzania kama 0687615616, 255687615616 au +255687615616" value={form.phone} onChange={(e) => update("phone", e.target.value)} required /></Field>
-                  <Field label={t("email")}><TextInput type="email" value={form.email} onChange={(e) => update("email", e.target.value)} required /></Field>
+                  <Field label={t("emailOptional")}><TextInput type="email" value={form.email} onChange={(e) => update("email", e.target.value)} /></Field>
                   <Field label={t("birthDate")}>
                     <DatePicker
                       value={form.birthDate}

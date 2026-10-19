@@ -174,7 +174,7 @@ function AttendeeDetailModal({ detail, onClose, onDownloadEmail, onDownloadTicke
           <div>
             <p className="text-xs font-bold uppercase text-primary">{attendee.ticketCode}</p>
             <h2 className="text-2xl font-bold tracking-normal">{attendee.name}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{attendee.email} · {attendee.phone}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{attendee.email ? `${attendee.email} · ` : ""}{attendee.phone}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button className="h-9 px-3" onClick={onDownloadTicket} type="button" variant="secondary"><Download size={15} /> Ticket SVG</Button>

@@ -25,21 +25,21 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food",
                 visits.new_info, visits.training_institution, visits.survey_status, visits.survey_answers, visits.created_at, visits.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 booths.name AS booth_name,
-                users.name AS scanned_by
+                COALESCE(users.name, 'Deleted user') AS scanned_by
          FROM visits
          JOIN attendees ON attendees.id = visits.attendee_id
          JOIN booths ON booths.id = visits.booth_id
-         JOIN users ON users.id = visits.scanned_by_user_id
+         LEFT JOIN users ON users.id = visits.scanned_by_user_id
          ${visitWhere}
          UNION ALL
          SELECT 'food' AS type, food_claims.id, NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question,
                 NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers, food_claims.created_at, food_claims.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 'Food desk' AS booth_name,
-                users.name AS scanned_by
+                COALESCE(users.name, 'Deleted user') AS scanned_by
          FROM food_claims
          JOIN attendees ON attendees.id = food_claims.attendee_id
-         JOIN users ON users.id = food_claims.claimed_by_user_id
+         LEFT JOIN users ON users.id = food_claims.claimed_by_user_id
          ${foodWhere}
          UNION ALL
          SELECT 'checkin' AS type, attendance_checkins.id, NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question,
@@ -47,10 +47,10 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food",
                 attendance_checkins.created_at, attendance_checkins.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 'Entrance' AS booth_name,
-                users.name AS scanned_by
+                COALESCE(users.name, 'Deleted user') AS scanned_by
          FROM attendance_checkins
          JOIN attendees ON attendees.id = attendance_checkins.attendee_id
-         JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
+         LEFT JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
          ${checkinWhere}
        )
        SELECT *, count(*) OVER()::int AS total_count
@@ -74,30 +74,30 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
     const { rows } = await pool.query(
       `SELECT 'booth' AS type, visits.created_at, visits.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
-              booths.name AS booth_name, users.name AS scanned_by, visits.purpose, visits.service, visits.satisfaction,
+              booths.name AS booth_name, COALESCE(users.name, 'Deleted user') AS scanned_by, visits.purpose, visits.service, visits.satisfaction,
               visits.question, visits.new_info, visits.training_institution, visits.survey_status, visits.survey_answers
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
        JOIN booths ON booths.id = visits.booth_id
-       JOIN users ON users.id = visits.scanned_by_user_id
+       LEFT JOIN users ON users.id = visits.scanned_by_user_id
        ${visitWhere}
        UNION ALL
        SELECT 'food' AS type, food_claims.created_at, food_claims.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
-              'Food desk' AS booth_name, users.name AS scanned_by, NULL AS purpose, NULL AS service, NULL AS satisfaction,
+              'Food desk' AS booth_name, COALESCE(users.name, 'Deleted user') AS scanned_by, NULL AS purpose, NULL AS service, NULL AS satisfaction,
               NULL AS question, NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
-       JOIN users ON users.id = food_claims.claimed_by_user_id
+       LEFT JOIN users ON users.id = food_claims.claimed_by_user_id
        ${foodWhere}
        UNION ALL
        SELECT 'checkin' AS type, attendance_checkins.created_at, attendance_checkins.scan_day,
               attendees.name AS attendee_name, attendees.ticket_code,
-              'Entrance' AS booth_name, users.name AS scanned_by,
+              'Entrance' AS booth_name, COALESCE(users.name, 'Deleted user') AS scanned_by,
               NULL AS purpose, NULL AS service, NULL AS satisfaction,
               NULL AS question, NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
        FROM attendance_checkins
        JOIN attendees ON attendees.id = attendance_checkins.attendee_id
-       JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
+       LEFT JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
        ${checkinWhere}
        ORDER BY created_at DESC`,
       params
@@ -655,19 +655,19 @@ adminRouter.get("/attendees/:id", requireAuth, requireRole("admin"), async (req,
         `SELECT visits.id, visits.scan_day, visits.purpose, visits.service, visits.satisfaction, visits.question,
                 visits.new_info, visits.training_institution, visits.survey_status, visits.survey_answers, visits.created_at,
                 booths.name AS booth_name,
-                users.name AS scanned_by
+                COALESCE(users.name, 'Deleted user') AS scanned_by
          FROM visits
          JOIN booths ON booths.id = visits.booth_id
-         JOIN users ON users.id = visits.scanned_by_user_id
+         LEFT JOIN users ON users.id = visits.scanned_by_user_id
          WHERE visits.attendee_id = $1
          ORDER BY visits.created_at DESC`,
         [attendee.id]
       ),
       pool.query(
         `SELECT food_claims.id, food_claims.scan_day, food_claims.created_at,
-                users.name AS claimed_by
+                COALESCE(users.name, 'Deleted user') AS claimed_by
          FROM food_claims
-         JOIN users ON users.id = food_claims.claimed_by_user_id
+         LEFT JOIN users ON users.id = food_claims.claimed_by_user_id
          WHERE food_claims.attendee_id = $1
          ORDER BY food_claims.created_at DESC`,
         [attendee.id]
@@ -838,6 +838,61 @@ adminRouter.patch("/users/:id", validate(updateUserSchema), async (req, res, nex
     res.json({ user: mapUser(rows[0]) });
   } catch (error) {
     next(error);
+  }
+});
+
+adminRouter.delete("/users/:id", async (req, res, next) => {
+  let client;
+  try {
+    client = await pool.connect();
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: "self_delete_forbidden", message: "You cannot delete your own account" });
+    }
+
+    await client.query("BEGIN");
+    await client.query("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE");
+
+    const targetResult = await client.query(
+      "SELECT id, name, role, roles, is_active FROM users WHERE id = $1",
+      [req.params.id]
+    );
+    const target = targetResult.rows[0];
+    if (!target) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "not_found", message: "User not found" });
+    }
+
+    const targetRoles = normalizeRoles(target);
+    if (target.is_active && targetRoles.includes("admin")) {
+      const activeAdmins = await client.query(
+        "SELECT count(*)::int AS count FROM users WHERE is_active = true AND roles @> ARRAY['admin']::TEXT[]"
+      );
+      if (activeAdmins.rows[0].count <= 1) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "last_admin", message: "The last active administrator cannot be deleted" });
+      }
+    }
+
+    const historyResult = await client.query(
+      `SELECT
+         (SELECT count(*)::int FROM visits WHERE scanned_by_user_id = $1) AS booth_scans,
+         (SELECT count(*)::int FROM food_claims WHERE claimed_by_user_id = $1) AS food_claims,
+         (SELECT count(*)::int FROM attendance_checkins WHERE checked_in_by_user_id = $1) AS checkins`,
+      [target.id]
+    );
+    await client.query("DELETE FROM users WHERE id = $1", [target.id]);
+    await client.query("COMMIT");
+
+    res.json({
+      ok: true,
+      deletedUser: { id: target.id, name: target.name },
+      retainedHistory: historyResult.rows[0]
+    });
+  } catch (error) {
+    await client?.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client?.release();
   }
 });
 

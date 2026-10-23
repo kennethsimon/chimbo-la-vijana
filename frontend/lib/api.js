@@ -28,6 +28,10 @@ export function patch(path, body) {
   return api(path, { method: "PATCH", body: JSON.stringify(body || {}) });
 }
 
+export function remove(path) {
+  return api(path, { method: "DELETE" });
+}
+
 export async function downloadFile(path, filename) {
   const response = await fetch(`${API_BASE}${path}`, {
     credentials: "include"

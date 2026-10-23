@@ -183,9 +183,9 @@ exhibitorRouter.post("/scans/visit", validate(visitSchema), async (req, res, nex
     } catch (error) {
       if (error.code === "23505") {
         const { rows } = await pool.query(
-          `SELECT visits.created_at, users.name AS scanned_by
+          `SELECT visits.created_at, COALESCE(users.name, 'Deleted user') AS scanned_by
            FROM visits
-           JOIN users ON users.id = visits.scanned_by_user_id
+           LEFT JOIN users ON users.id = visits.scanned_by_user_id
            WHERE visits.attendee_id = $1 AND visits.booth_id = $2 AND visits.scan_day = $3`,
           [attendee.id, boothId, req.validated.scanDay]
         );
@@ -283,35 +283,35 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
       `SELECT 'booth' AS type, visits.id, visits.created_at, visits.scan_day,
               attendees.name AS attendee_name, attendees.ticket_code,
               booths.name AS booth_name,
-              users.name AS scanned_by,
+              COALESCE(users.name, 'Deleted user') AS scanned_by,
               visits.purpose, visits.service, visits.satisfaction, visits.question, visits.new_info,
               visits.training_institution, visits.survey_status, visits.survey_answers
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
        JOIN booths ON booths.id = visits.booth_id
-       JOIN users ON users.id = visits.scanned_by_user_id
+       LEFT JOIN users ON users.id = visits.scanned_by_user_id
        ${visitWhere}
        UNION ALL
        SELECT 'food' AS type, food_claims.id, food_claims.created_at, food_claims.scan_day,
               attendees.name AS attendee_name, attendees.ticket_code,
               'Food desk' AS booth_name,
-              users.name AS scanned_by,
+              COALESCE(users.name, 'Deleted user') AS scanned_by,
               NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question, NULL AS new_info,
               NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
-       JOIN users ON users.id = food_claims.claimed_by_user_id
+       LEFT JOIN users ON users.id = food_claims.claimed_by_user_id
        ${foodWhere}
        UNION ALL
        SELECT 'checkin' AS type, attendance_checkins.id, attendance_checkins.created_at, attendance_checkins.scan_day,
               attendees.name AS attendee_name, attendees.ticket_code,
               'Entrance' AS booth_name,
-              users.name AS scanned_by,
+              COALESCE(users.name, 'Deleted user') AS scanned_by,
               NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question, NULL AS new_info,
               NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
        FROM attendance_checkins
        JOIN attendees ON attendees.id = attendance_checkins.attendee_id
-       JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
+       LEFT JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
        ${checkinWhere}
        ORDER BY created_at DESC
        LIMIT 250`,

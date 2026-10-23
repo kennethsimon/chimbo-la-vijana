@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   CircleHelp,
+  DoorOpen,
   Lightbulb,
   Mail,
   MessageSquareText,
@@ -54,8 +55,8 @@ function Dashboard() {
     return (
       <div className="grid gap-4">
         <Card><CardContent className="h-32 animate-pulse bg-secondary/50" /></Card>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, index) => <Card key={index}><CardContent className="h-32 animate-pulse bg-secondary/50" /></Card>)}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, index) => <Card key={index}><CardContent className="h-32 animate-pulse bg-secondary/50" /></Card>)}
         </div>
       </div>
     );
@@ -76,8 +77,9 @@ function Dashboard() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricCard icon={<UsersRound size={20} />} label="Total attendees" value={attendeeTotal} hint="Registered coupons" />
+        <MetricCard icon={<DoorOpen size={20} />} label="Entrance check-ins" value={totals.checkins} hint="Confirmed attendance scans" tone="blue" />
         <MetricCard icon={<MessageSquareText size={20} />} label="SMS sent rate" value={`${smsRate}%`} hint={`${formatNumber(totals.smsSentAttendees)} sent`} tone="amber" />
         <MetricCard icon={<Mail size={20} />} label="Email sent rate" value={`${emailRate}%`} hint={`${formatNumber(totals.emailSentAttendees)} of ${formatNumber(totals.attendeesWithEmail)} opted in`} tone="blue" />
         <MetricCard icon={<Utensils size={20} />} label="Food claim rate" value={`${foodRate}%`} hint={`${formatNumber(totals.unclaimedFood)} unclaimed`} tone="red" />
@@ -126,6 +128,8 @@ function Dashboard() {
           <div className="grid gap-5 lg:grid-cols-2">
             <DonutChart rows={data.operations?.foodClaims || []} centerLabel="Food" />
             <BarChart rows={(data.topBooths || []).map((row) => ({ label: row.name, count: row.visits }))} maxRows={8} title="Top booths" />
+            <BarChart rows={data.operations?.attendanceByDay || []} title="Entrance check-ins by day" />
+            <FoodEligibility rows={data.operations?.foodEligibilityByDay || []} />
           </div>
         </Panel>
         <Panel title="Recent activity" description="Latest registrations, booth scans, and food claims">
@@ -341,7 +345,7 @@ function RecentActivity({ rows = [] }) {
       {items.map((row, index) => (
         <div className="flex items-start gap-3 rounded-lg border px-4 py-3" key={`${row.type}-${row.created_at}-${index}`}>
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-secondary text-primary">
-            {row.type === "food" ? <Utensils size={17} /> : row.type === "visit" ? <QrCode size={17} /> : <UsersRound size={17} />}
+            {row.type === "food" ? <Utensils size={17} /> : row.type === "visit" ? <QrCode size={17} /> : row.type === "checkin" ? <DoorOpen size={17} /> : <UsersRound size={17} />}
           </span>
           <div className="min-w-0 flex-1">
             <strong className="block truncate text-sm font-semibold text-foreground">{row.actor}</strong>
@@ -350,6 +354,29 @@ function RecentActivity({ rows = [] }) {
           <span className="shrink-0 text-xs text-muted-foreground">{new Date(row.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function FoodEligibility({ rows = [] }) {
+  if (!rows.length) return <EmptyState title="No eligibility data yet" />;
+  return (
+    <div className="grid gap-3">
+      <h3 className="text-sm font-semibold text-foreground">Food eligibility by day</h3>
+      {rows.map((row) => {
+        const eligible = Number(row.eligible || 0);
+        const notEligible = Number(row.not_eligible || 0);
+        const total = eligible + notEligible;
+        return (
+          <div className="grid gap-2 rounded-lg border p-3" key={row.label}>
+            <div className="flex items-center justify-between text-sm"><strong>{row.label}</strong><span className="text-muted-foreground">{eligible} / {total} eligible</span></div>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-secondary">
+              <span className="bg-teal-600" style={{ width: `${percentage(eligible, total)}%` }} />
+            </div>
+            <span className="text-xs text-muted-foreground">{notEligible} still need three distinct booth visits</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

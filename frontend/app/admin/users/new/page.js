@@ -80,6 +80,7 @@ function NewUser() {
               <SelectItem value="admin">Admin</SelectItem>
               <SelectItem value="exhibitor">Mhudumu wa banda</SelectItem>
               <SelectItem value="food">Mhudumu wa chakula</SelectItem>
+              <SelectItem value="checkin">Mhudumu wa kiingilio</SelectItem>
             </SelectContent>
           </Select>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -143,5 +144,5 @@ function removeRole(form, role) {
 }
 
 function roleLabel(role) {
-  return role === "admin" ? "Admin" : role === "food" ? "Chakula" : "Banda";
+  return role === "admin" ? "Admin" : role === "food" ? "Chakula" : role === "checkin" ? "Kiingilio" : "Banda";
 }

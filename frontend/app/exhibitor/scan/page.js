@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Building2, Camera, CheckCircle2, ClipboardList, Search, Utensils, X } from "lucide-react";
+import { Building2, Camera, CheckCircle2, ClipboardList, DoorOpen, Search, Utensils, X } from "lucide-react";
 import { RequireAuth } from "../../../components/RequireAuth";
 import { api, post } from "../../../lib/api";
 import { SERVICES } from "../../../lib/regions";
@@ -20,6 +20,7 @@ export default function ScanPage() {
 function Scanner({ user }) {
   const canScanBooth = hasRole(user, "admin") || hasRole(user, "exhibitor");
   const canScanFood = hasRole(user, "admin") || hasRole(user, "food");
+  const canCheckIn = hasRole(user, "admin") || hasRole(user, "checkin");
   const qrRef = useRef(null);
   const scannerRef = useRef(null);
   const mountedRef = useRef(true);
@@ -30,7 +31,7 @@ function Scanner({ user }) {
   const [usedDialog, setUsedDialog] = useState(null);
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [camera, setCamera] = useState(false);
-  const [mode, setMode] = useState(canScanFood ? "food" : "booth");
+  const [mode, setMode] = useState(canCheckIn ? "checkin" : canScanBooth ? "booth" : "food");
   const [visit, setVisit] = useState(defaultVisit());
   const [booths, setBooths] = useState([]);
   const [selectedBoothId, setSelectedBoothId] = useState("");
@@ -190,10 +191,30 @@ function Scanner({ user }) {
     }
   }
 
+  async function confirmCheckin() {
+    setLoading("checkin");
+    try {
+      const result = await post("/exhibitor/scans/checkin", { ticketCode, scanDay });
+      toast.success(`Mahudhurio yamethibitishwa saa ${new Date(result.checkedInAt).toLocaleTimeString()}`);
+      await lookupTicket(ticketCode);
+    } catch (error) {
+      if (error.status === 409) {
+        setUsedDialog({ title: "QR imeshatumika", text: `Mahudhurio ya tiketi hii tayari yamethibitishwa tarehe ${formatEventDay(scanDay)}.` });
+        toast.warning("Mahudhurio ya tiketi hii tayari yamethibitishwa siku hii.");
+        return;
+      }
+      toast.error(error.message);
+    } finally {
+      setLoading("");
+    }
+  }
+
   function changeMode(nextMode) {
     if (nextMode === "food" && !canScanFood) return;
     if (nextMode === "booth" && !canScanBooth) return;
+    if (nextMode === "checkin" && !canCheckIn) return;
     setMode(nextMode);
+    setLookup(null);
     setSurveyOpen(false);
   }
 
@@ -236,17 +257,25 @@ function Scanner({ user }) {
             <h1 className="text-3xl font-bold tracking-normal text-white">Scan QR ya mshiriki</h1>
             <p className="mt-2 text-sm text-white/70">Ruhusa: <strong className="text-white">{roleLabels(user)}</strong>{canScanBooth ? <> · Banda: <strong className="text-white">{boothName || "Chagua banda"}</strong></> : null}</p>
           </div>
-          <div className="grid grid-cols-2 gap-3 rounded-lg border border-white/15 bg-white/5 p-1">
+          <div className="grid gap-2 rounded-lg border border-white/15 bg-white/5 p-1 sm:grid-cols-3">
             <button
-              className={mode === "food" ? "flex min-h-14 items-center justify-center gap-2 rounded-md bg-accent px-4 text-base font-black text-accent-foreground shadow-sm disabled:opacity-40" : "flex min-h-14 items-center justify-center gap-2 rounded-md px-4 text-base font-black text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"}
+              className={mode === "checkin" ? "flex min-h-14 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-black text-accent-foreground shadow-sm disabled:opacity-40" : "flex min-h-14 items-center justify-center gap-2 rounded-md px-3 text-sm font-black text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"}
+              disabled={!canCheckIn}
+              onClick={() => changeMode("checkin")}
+              type="button"
+            >
+              <DoorOpen size={20} /> Kiingilio
+            </button>
+            <button
+              className={mode === "food" ? "flex min-h-14 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-black text-accent-foreground shadow-sm disabled:opacity-40" : "flex min-h-14 items-center justify-center gap-2 rounded-md px-3 text-sm font-black text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"}
               disabled={!canScanFood}
               onClick={() => changeMode("food")}
               type="button"
             >
-              <Utensils size={20} /> Chakula (mara moja)
+              <Utensils size={20} /> Chakula
             </button>
             <button
-              className={mode === "booth" ? "flex min-h-14 items-center justify-center gap-2 rounded-md bg-accent px-4 text-base font-black text-accent-foreground shadow-sm disabled:opacity-40" : "flex min-h-14 items-center justify-center gap-2 rounded-md px-4 text-base font-black text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"}
+              className={mode === "booth" ? "flex min-h-14 items-center justify-center gap-2 rounded-md bg-accent px-3 text-sm font-black text-accent-foreground shadow-sm disabled:opacity-40" : "flex min-h-14 items-center justify-center gap-2 rounded-md px-3 text-sm font-black text-white/70 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"}
               disabled={!canScanBooth}
               onClick={() => changeMode("booth")}
               type="button"
@@ -269,7 +298,11 @@ function Scanner({ user }) {
             <div className="grid content-start gap-4">
               <div className="rounded-lg border border-white/15 bg-white/5 p-4">
                 <p className="mb-3 text-sm font-medium text-white/70">
-                  {mode === "food" ? "Mode ya chakula itathibitisha tiketi mara moja kwa siku uliyochagua." : "Mode ya banda itahifadhi ziara na survey kwa siku uliyochagua."}
+                  {mode === "food"
+                    ? "Chakula kinathibitishwa mara moja kwa siku baada ya mshiriki kutembelea mabanda 3 tofauti siku hiyo."
+                    : mode === "checkin"
+                      ? "Kiingilio kinathibitisha kuwa mshiriki amehudhuria siku uliyochagua."
+                      : "Mode ya banda itahifadhi ziara na survey kwa siku uliyochagua."}
                 </p>
                 <Field className="mb-3" label="Siku ya kuscan">
                   <SelectInput value={scanDay} onChange={(e) => {
@@ -315,12 +348,39 @@ function Scanner({ user }) {
                   ) : null}
                   {mode === "food" ? (
                     <>
+                      <div className="grid gap-2 rounded-md border bg-secondary/50 p-3">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <strong>Ziara za mabanda</strong>
+                          <Badge tone={lookup.boothEligibility?.eligible ? "ok" : "warn"}>
+                            {lookup.boothEligibility?.visited || 0} / {lookup.boothEligibility?.required || 3}
+                          </Badge>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-border">
+                          <div className="h-full bg-primary" style={{ width: `${Math.min(100, ((lookup.boothEligibility?.visited || 0) / (lookup.boothEligibility?.required || 3)) * 100)}%` }} />
+                        </div>
+                        {lookup.boothEligibility?.booths?.length ? (
+                          <p className="text-xs text-muted-foreground">Yaliyotembelewa: {lookup.boothEligibility.booths.join(", ")}</p>
+                        ) : <p className="text-xs text-muted-foreground">Bado hajatembelea banda lolote siku hii.</p>}
+                      </div>
                       <Badge tone={lookup.foodClaim ? "warn" : "ok"}>
                         {lookup.foodClaim ? `Chakula kimetumika ${formatEventDay(scanDay)} · ${new Date(lookup.foodClaim.claimedAt).toLocaleString()}` : `Chakula cha ${formatEventDay(scanDay)} bado hakijatumika`}
                       </Badge>
-                      <Button disabled={!allowedSelectedDay || Boolean(lookup.foodClaim) || loading === "food"} onClick={claimFood}>
+                      {!lookup.boothEligibility?.eligible ? <Badge tone="warn">Atembelee mabanda {lookup.boothEligibility?.remaining || 3} zaidi ili astahiki chakula</Badge> : null}
+                      <Button disabled={!allowedSelectedDay || !lookup.boothEligibility?.eligible || Boolean(lookup.foodClaim) || loading === "food"} onClick={claimFood}>
                         {loading === "food" ? <Spinner /> : lookup.foodClaim ? <CheckCircle2 size={18} /> : <Utensils size={18} />}
                         {lookup.foodClaim ? "Chakula tayari kimethibitishwa" : `Thibitisha chakula ${formatEventDay(scanDay)}`}
+                      </Button>
+                    </>
+                  ) : mode === "checkin" ? (
+                    <>
+                      <Badge tone={lookup.attendanceCheckin ? "warn" : "ok"}>
+                        {lookup.attendanceCheckin
+                          ? `Mahudhurio yalithibitishwa ${new Date(lookup.attendanceCheckin.checkedInAt).toLocaleString()}`
+                          : `Bado hajaingia ${formatEventDay(scanDay)}`}
+                      </Badge>
+                      <Button disabled={!allowedSelectedDay || Boolean(lookup.attendanceCheckin) || loading === "checkin"} onClick={confirmCheckin}>
+                        {loading === "checkin" ? <Spinner /> : lookup.attendanceCheckin ? <CheckCircle2 size={18} /> : <DoorOpen size={18} />}
+                        {lookup.attendanceCheckin ? "Mahudhurio tayari yamethibitishwa" : `Thibitisha mahudhurio ${formatEventDay(scanDay)}`}
                       </Button>
                     </>
                   ) : (
@@ -458,7 +518,7 @@ function hasRole(user, role) {
 }
 
 function roleLabels(user) {
-  const labels = { admin: "Admin", exhibitor: "Banda", food: "Chakula" };
+  const labels = { admin: "Admin", exhibitor: "Banda", food: "Chakula", checkin: "Kiingilio" };
   const roles = user?.roles?.length ? user.roles : [user?.role].filter(Boolean);
   return roles.map((role) => labels[role] || role).join(" · ");
 }

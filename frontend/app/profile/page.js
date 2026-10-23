@@ -114,5 +114,5 @@ function Detail({ label, value }) {
 }
 
 function roleLabel(role) {
-  return role === "admin" ? "Admin" : role === "food" ? "Food scanner" : "Exhibitor";
+  return role === "admin" ? "Admin" : role === "food" ? "Food scanner" : role === "checkin" ? "Entrance scanner" : "Exhibitor";
 }

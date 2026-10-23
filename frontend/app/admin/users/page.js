@@ -127,6 +127,6 @@ function Users() {
 }
 
 function roleLabel(role) {
-  return role === "admin" ? "Admin" : role === "food" ? "Chakula" : "Banda";
+  return role === "admin" ? "Admin" : role === "food" ? "Chakula" : role === "checkin" ? "Kiingilio" : "Banda";
 }
 

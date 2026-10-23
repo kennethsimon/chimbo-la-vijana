@@ -25,7 +25,7 @@ export function StaffNav({ user, onLogout, compact = false, collapsed = false })
   const pathname = usePathname();
   const { t } = useLanguage();
   const isAdmin = hasRole(user, "admin");
-  const canScan = isAdmin || hasRole(user, "exhibitor") || hasRole(user, "food");
+  const canScan = isAdmin || hasRole(user, "exhibitor") || hasRole(user, "food") || hasRole(user, "checkin");
   const home = isAdmin ? "/admin/dashboard" : "/exhibitor/scan";
   const linkClass = (href) => cn(
     "flex h-10 items-center gap-3 rounded-md px-3 text-sm font-bold transition-colors",
@@ -139,7 +139,8 @@ function roleLabels(user) {
   const labels = {
     admin: "Msimamizi",
     exhibitor: "Banda",
-    food: "Chakula"
+    food: "Chakula",
+    checkin: "Kiingilio"
   };
   const roles = user?.roles?.length ? user.roles : [user?.role].filter(Boolean);
   return roles.map((role) => labels[role] || role).join(" · ");

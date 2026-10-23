@@ -9,12 +9,13 @@ import { createUserSchema, updateUserSchema, validate } from "../validators.js";
 
 export const adminRouter = Router();
 
-adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food"), async (req, res, next) => {
+adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food", "checkin"), async (req, res, next) => {
   try {
     const { page, pageSize, limit, offset } = getPagination(req);
     const params = [];
     const visitWhere = hasRole(req.user, "admin") ? "" : "WHERE visits.scanned_by_user_id = $1";
     const foodWhere = hasRole(req.user, "admin") ? "" : "WHERE food_claims.claimed_by_user_id = $1";
+    const checkinWhere = hasRole(req.user, "admin") ? "" : "WHERE attendance_checkins.checked_in_by_user_id = $1";
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
     params.push(limit, offset);
 
@@ -40,6 +41,17 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
          JOIN attendees ON attendees.id = food_claims.attendee_id
          JOIN users ON users.id = food_claims.claimed_by_user_id
          ${foodWhere}
+         UNION ALL
+         SELECT 'checkin' AS type, attendance_checkins.id, NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question,
+                NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers,
+                attendance_checkins.created_at, attendance_checkins.scan_day,
+                attendees.name AS attendee_name, attendees.ticket_code,
+                'Entrance' AS booth_name,
+                users.name AS scanned_by
+         FROM attendance_checkins
+         JOIN attendees ON attendees.id = attendance_checkins.attendee_id
+         JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
+         ${checkinWhere}
        )
        SELECT *, count(*) OVER()::int AS total_count
        FROM scan_rows
@@ -53,11 +65,12 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
   }
 });
 
-adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", "food"), async (req, res, next) => {
+adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", "food", "checkin"), async (req, res, next) => {
   try {
     const params = [];
     const visitWhere = hasRole(req.user, "admin") ? "" : "WHERE visits.scanned_by_user_id = $1";
     const foodWhere = hasRole(req.user, "admin") ? "" : "WHERE food_claims.claimed_by_user_id = $1";
+    const checkinWhere = hasRole(req.user, "admin") ? "" : "WHERE attendance_checkins.checked_in_by_user_id = $1";
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
     const { rows } = await pool.query(
       `SELECT 'booth' AS type, visits.created_at, visits.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
@@ -76,6 +89,16 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        JOIN attendees ON attendees.id = food_claims.attendee_id
        JOIN users ON users.id = food_claims.claimed_by_user_id
        ${foodWhere}
+       UNION ALL
+       SELECT 'checkin' AS type, attendance_checkins.created_at, attendance_checkins.scan_day,
+              attendees.name AS attendee_name, attendees.ticket_code,
+              'Entrance' AS booth_name, users.name AS scanned_by,
+              NULL AS purpose, NULL AS service, NULL AS satisfaction,
+              NULL AS question, NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
+       FROM attendance_checkins
+       JOIN attendees ON attendees.id = attendance_checkins.attendee_id
+       JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
+       ${checkinWhere}
        ORDER BY created_at DESC`,
       params
     );
@@ -94,6 +117,7 @@ adminRouter.get("/dashboard", async (req, res, next) => {
   try {
     const [
       totalAttendees,
+      totalCheckins,
       totalFoodClaims,
       totalVisits,
       totalExhibitors,
@@ -121,9 +145,12 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       satisfactionSummary,
       recentQuestions,
       recentNewInfo,
-      surveyStatus
+      surveyStatus,
+      attendanceByDay,
+      foodEligibilityByDay
     ] = await Promise.all([
       pool.query("SELECT count(*)::int AS n FROM attendees"),
+      pool.query("SELECT count(*)::int AS n FROM attendance_checkins"),
       pool.query("SELECT count(*)::int AS n FROM food_claims"),
       pool.query("SELECT count(*)::int AS n FROM visits"),
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['exhibitor']::TEXT[] AND is_active = true"),
@@ -158,6 +185,10 @@ adminRouter.get("/dashboard", async (req, res, next) => {
          SELECT 'food' AS type, attendees.name AS actor, 'Food claimed' AS detail, food_claims.created_at
          FROM food_claims
          JOIN attendees ON attendees.id = food_claims.attendee_id
+         UNION ALL
+         SELECT 'checkin' AS type, attendees.name AS actor, 'Entrance attendance' AS detail, attendance_checkins.created_at
+         FROM attendance_checkins
+         JOIN attendees ON attendees.id = attendance_checkins.attendee_id
          ORDER BY created_at DESC
          LIMIT 15`
       ),
@@ -335,6 +366,32 @@ adminRouter.get("/dashboard", async (req, res, next) => {
          FROM visits
          GROUP BY survey_status
          ORDER BY count DESC, survey_status`
+      ),
+      pool.query(
+        `SELECT to_char(scan_day, 'DD Mon') AS label, count(*)::int AS count
+         FROM attendance_checkins
+         GROUP BY scan_day
+         ORDER BY scan_day`
+      ),
+      pool.query(
+        `WITH attendee_days AS (
+           SELECT attendees.id AS attendee_id, attendance_day::date AS scan_day
+           FROM attendees
+           CROSS JOIN LATERAL unnest(attendees.attendance_days) AS attendance_day
+         ), booth_counts AS (
+           SELECT visits.attendee_id, visits.scan_day, count(DISTINCT visits.booth_id)::int AS booth_count
+           FROM visits
+           JOIN booths ON booths.id = visits.booth_id
+           WHERE upper(booths.name) <> 'FOOD DESK'
+           GROUP BY visits.attendee_id, visits.scan_day
+         )
+         SELECT to_char(attendee_days.scan_day, 'DD Mon') AS label,
+                count(*) FILTER (WHERE coalesce(booth_counts.booth_count, 0) >= 3)::int AS eligible,
+                count(*) FILTER (WHERE coalesce(booth_counts.booth_count, 0) < 3)::int AS not_eligible
+         FROM attendee_days
+         LEFT JOIN booth_counts USING (attendee_id, scan_day)
+         GROUP BY attendee_days.scan_day
+         ORDER BY attendee_days.scan_day`
       )
     ]);
 
@@ -343,6 +400,7 @@ adminRouter.get("/dashboard", async (req, res, next) => {
     res.json({
       totals: {
         attendees: attendeeCount,
+        checkins: totalCheckins.rows[0].n,
         foodClaims: foodClaimCount,
         unclaimedFood: Math.max(0, attendeeCount - foodClaimCount),
         visits: totalVisits.rows[0].n,
@@ -371,6 +429,8 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       },
       operations: {
         registrationTrend: registrationTrend.rows,
+        attendanceByDay: attendanceByDay.rows,
+        foodEligibilityByDay: foodEligibilityByDay.rows,
         foodClaims: [
           { label: "Claimed", count: foodClaimCount },
           { label: "Not claimed", count: Math.max(0, attendeeCount - foodClaimCount) }

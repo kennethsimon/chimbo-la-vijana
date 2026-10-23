@@ -56,7 +56,7 @@ function Scans({ user }) {
       <PageHeader
         eyebrow="Ufuatiliaji"
         title="Historia ya scan"
-        description={hasRole(user, "admin") ? "Admin anaona scans zote za mabanda na chakula." : "Unaona scans ulizofanya wewe tu."}
+        description={hasRole(user, "admin") ? "Admin anaona scans zote za kiingilio, mabanda na chakula." : "Unaona scans ulizofanya wewe tu."}
         action={<Button disabled={exporting} onClick={exportScans} variant="secondary">{exporting ? <Spinner /> : <Download size={16} />} Export CSV</Button>}
       />
       <Card>
@@ -69,7 +69,7 @@ function Scans({ user }) {
           emptyTitle="Hakuna scan zilizohifadhiwa bado"
           columns={[
             { key: "attendee", label: "Mshiriki", render: (scan) => <><strong>{scan.attendee_name}</strong><div className="text-sm text-muted-foreground">{scan.ticket_code}</div></> },
-            { key: "type", label: "Aina", render: (scan) => <Badge tone={scan.type === "food" ? "warn" : "neutral"}>{scan.type === "food" ? "Chakula" : "Banda"}</Badge> },
+            { key: "type", label: "Aina", render: (scan) => <Badge tone={scan.type === "food" ? "warn" : scan.type === "checkin" ? "ok" : "neutral"}>{scan.type === "food" ? "Chakula" : scan.type === "checkin" ? "Kiingilio" : "Banda"}</Badge> },
             { key: "scan_day", label: "Siku", render: (scan) => <Badge tone="neutral">{formatEventDay(scan.scan_day)}</Badge> },
             { key: "booth", label: "Banda/eneo", render: (scan) => <Badge tone="neutral">{scan.booth_name}</Badge> },
             { key: "survey", label: "Utafiti", render: (scan) => <SurveySummary scan={scan} /> },
@@ -86,7 +86,7 @@ function Scans({ user }) {
 function SurveySummary({ scan }) {
   const answers = Array.isArray(scan.survey_answers) ? scan.survey_answers : [];
   const extraAnswers = answers.filter((answer) => !["surveyStatus", "purpose", "service", "trainingInstitution", "satisfaction", "question", "newInfo"].includes(answer.id));
-  if (scan.type === "food") return <span className="text-sm text-muted-foreground">-</span>;
+  if (scan.type !== "booth") return <span className="text-sm text-muted-foreground">-</span>;
   if (scan.survey_status === "skipped") {
     return (
       <div className="grid gap-1">

@@ -329,7 +329,7 @@ function makeCredentialSvg({ eventName, safeName, safeEmail, safePassword, roleT
 }
 
 function formatRoles(roles = []) {
-  const labels = { admin: "Admin", exhibitor: "Banda", food: "Chakula" };
+  const labels = { admin: "Admin", exhibitor: "Banda", food: "Chakula", checkin: "Kiingilio" };
   return roles.map((role) => labels[role] || role).join(" · ");
 }
 

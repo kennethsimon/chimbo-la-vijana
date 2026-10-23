@@ -1,6 +1,11 @@
 import pg from "pg";
 import { config } from "./config.js";
 
+// Keep PostgreSQL DATE values as calendar-date strings. Converting them to
+// JavaScript Date objects can shift an event day when the server timezone is
+// ahead of UTC.
+pg.types.setTypeParser(1082, (value) => value);
+
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl
 });

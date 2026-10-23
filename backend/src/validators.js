@@ -76,12 +76,19 @@ export const foodSchema = z.object({
   scanDay: eventDaySchema
 });
 
+export const checkinSchema = z.object({
+  ticketCode: z.string().trim().min(4).max(80),
+  scanDay: eventDaySchema
+});
+
+const dashboardRoleSchema = z.enum(["admin", "exhibitor", "food", "checkin"]);
+
 export const createUserSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(160),
   password: z.string().min(8).max(200).optional(),
-  role: z.enum(["admin", "exhibitor", "food"]).optional(),
-  roles: z.array(z.enum(["admin", "exhibitor", "food"])).min(1).max(3).optional(),
+  role: dashboardRoleSchema.optional(),
+  roles: z.array(dashboardRoleSchema).min(1).max(4).optional(),
   boothId: z.string().uuid().optional().nullable(),
   isActive: z.boolean().optional()
 });
@@ -89,8 +96,8 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   password: z.string().min(8).max(200).optional(),
-  role: z.enum(["admin", "exhibitor", "food"]).optional(),
-  roles: z.array(z.enum(["admin", "exhibitor", "food"])).min(1).max(3).optional(),
+  role: dashboardRoleSchema.optional(),
+  roles: z.array(dashboardRoleSchema).min(1).max(4).optional(),
   boothId: z.string().uuid().optional().nullable(),
   isActive: z.boolean().optional()
 });

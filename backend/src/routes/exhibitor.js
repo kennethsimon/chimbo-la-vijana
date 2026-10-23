@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { hasRole, requireAuth, requireRole } from "../auth.js";
-import { EVENT_DAYS, foodSchema, lookupSchema, validate, visitSchema } from "../validators.js";
+import { checkinSchema, EVENT_DAYS, foodSchema, lookupSchema, validate, visitSchema } from "../validators.js";
 import { buildVisitSurveyAnswers, isTrainingCentre, servicesForBooth, TRAINING_INSTITUTIONS } from "../boothSurvey.js";
 
 export const exhibitorRouter = Router();
 
-exhibitorRouter.use(requireAuth, requireRole("admin", "exhibitor", "food"));
+const REQUIRED_FOOD_BOOTHS = 3;
+
+exhibitorRouter.use(requireAuth, requireRole("admin", "exhibitor", "food", "checkin"));
 
 exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, next) => {
   try {
@@ -28,6 +30,12 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
        ORDER BY visits.created_at DESC`,
       [attendee.id]
     );
+    const { rows: checkinRows } = await pool.query(
+      "SELECT scan_day, created_at FROM attendance_checkins WHERE attendee_id = $1 ORDER BY scan_day",
+      [attendee.id]
+    );
+
+    const boothEligibility = buildBoothEligibility(visitRows, scanDay);
 
     const boothIdForCurrentVisit = getRequestedBoothId(req);
     res.json({
@@ -40,6 +48,17 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
         scanDay: formatScanDay(row.scan_day),
         claimedAt: row.created_at
       })),
+      attendanceCheckin: checkinRows.find((row) => formatScanDay(row.scan_day) === scanDay)
+        ? {
+            scanDay,
+            checkedInAt: checkinRows.find((row) => formatScanDay(row.scan_day) === scanDay).created_at
+          }
+        : null,
+      attendanceCheckins: checkinRows.map((row) => ({
+        scanDay: formatScanDay(row.scan_day),
+        checkedInAt: row.created_at
+      })),
+      boothEligibility,
       visits: visitRows.map((row) => ({
         boothName: row.booth_name,
         boothId: row.booth_id,
@@ -57,12 +76,52 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
       })),
       permissions: {
         canScanBooth: hasRole(req.user, "admin") || hasRole(req.user, "exhibitor"),
-        canScanFood: hasRole(req.user, "admin") || hasRole(req.user, "food")
+        canScanFood: hasRole(req.user, "admin") || hasRole(req.user, "food"),
+        canCheckIn: hasRole(req.user, "admin") || hasRole(req.user, "checkin")
       },
       currentBoothVisit: boothIdForCurrentVisit
         ? visitRows.find((row) => row.booth_id === boothIdForCurrentVisit && formatScanDay(row.scan_day) === scanDay) || null
         : null
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+exhibitorRouter.post("/scans/checkin", validate(checkinSchema), async (req, res, next) => {
+  try {
+    if (!hasRole(req.user, "admin") && !hasRole(req.user, "checkin")) {
+      return res.status(403).json({ error: "forbidden", message: "Only entrance users can confirm attendance" });
+    }
+    const attendee = await findAttendee(req.validated.ticketCode);
+    if (!attendee) return res.status(404).json({ error: "not_found", message: "Ticket code was not found" });
+    if (!isAllowedScanDay(attendee, req.validated.scanDay)) {
+      return res.status(400).json({ error: "invalid_scan_day", message: "Tiketi hii haijachagua siku hii ya kuhudhuria." });
+    }
+
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO attendance_checkins (attendee_id, checked_in_by_user_id, scan_day)
+         VALUES ($1, $2, $3)
+         RETURNING created_at`,
+        [attendee.id, req.user.id, req.validated.scanDay]
+      );
+      res.status(201).json({ ok: true, checkedInAt: rows[0].created_at });
+    } catch (error) {
+      if (error.code === "23505") {
+        const { rows } = await pool.query(
+          "SELECT created_at FROM attendance_checkins WHERE attendee_id = $1 AND scan_day = $2",
+          [attendee.id, req.validated.scanDay]
+        );
+        return res.status(409).json({
+          error: "already_checked_in",
+          message: "Attendance has already been confirmed for this ticket on this day",
+          scanDay: req.validated.scanDay,
+          checkedInAt: rows[0]?.created_at
+        });
+      }
+      throw error;
+    }
   } catch (error) {
     next(error);
   }
@@ -146,6 +205,7 @@ exhibitorRouter.post("/scans/visit", validate(visitSchema), async (req, res, nex
 });
 
 exhibitorRouter.post("/scans/food", validate(foodSchema), async (req, res, next) => {
+  const client = await pool.connect();
   try {
     if (!hasRole(req.user, "admin") && !hasRole(req.user, "food")) {
       return res.status(403).json({ error: "forbidden", message: "Only food users can confirm food claims" });
@@ -156,17 +216,41 @@ exhibitorRouter.post("/scans/food", validate(foodSchema), async (req, res, next)
       return res.status(400).json({ error: "invalid_scan_day", message: "Tiketi hii haijachagua siku hii ya kuhudhuria." });
     }
 
+    await client.query("BEGIN");
+    const eligibilityResult = await client.query(
+      `SELECT count(DISTINCT visits.booth_id)::int AS visited
+       FROM visits
+       JOIN booths ON booths.id = visits.booth_id
+       WHERE visits.attendee_id = $1
+         AND visits.scan_day = $2
+         AND upper(booths.name) <> 'FOOD DESK'`,
+      [attendee.id, req.validated.scanDay]
+    );
+    const visited = eligibilityResult.rows[0].visited;
+    if (visited < REQUIRED_FOOD_BOOTHS) {
+      await client.query("ROLLBACK");
+      return res.status(422).json({
+        error: "insufficient_booth_visits",
+        message: `Mshiriki lazima atembelee angalau mabanda ${REQUIRED_FOOD_BOOTHS} tofauti kabla ya kupata chakula.`,
+        required: REQUIRED_FOOD_BOOTHS,
+        visited,
+        remaining: REQUIRED_FOOD_BOOTHS - visited
+      });
+    }
+
     try {
-      const { rows } = await pool.query(
+      const { rows } = await client.query(
         `INSERT INTO food_claims (attendee_id, claimed_by_user_id, scan_day)
          VALUES ($1, $2, $3)
          RETURNING created_at`,
         [attendee.id, req.user.id, req.validated.scanDay]
       );
+      await client.query("COMMIT");
       res.status(201).json({ ok: true, claimedAt: rows[0].created_at });
     } catch (error) {
+      await client.query("ROLLBACK");
       if (error.code === "23505") {
-        const { rows } = await pool.query(
+        const { rows } = await client.query(
           "SELECT created_at FROM food_claims WHERE attendee_id = $1 AND scan_day = $2",
           [attendee.id, req.validated.scanDay]
         );
@@ -180,7 +264,10 @@ exhibitorRouter.post("/scans/food", validate(foodSchema), async (req, res, next)
       throw error;
     }
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
     next(error);
+  } finally {
+    client.release();
   }
 });
 
@@ -189,6 +276,7 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
     const params = [];
     const visitWhere = hasRole(req.user, "admin") ? "" : "WHERE visits.scanned_by_user_id = $1";
     const foodWhere = hasRole(req.user, "admin") ? "" : "WHERE food_claims.claimed_by_user_id = $1";
+    const checkinWhere = hasRole(req.user, "admin") ? "" : "WHERE attendance_checkins.checked_in_by_user_id = $1";
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
 
     const { rows } = await pool.query(
@@ -214,6 +302,17 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
        JOIN attendees ON attendees.id = food_claims.attendee_id
        JOIN users ON users.id = food_claims.claimed_by_user_id
        ${foodWhere}
+       UNION ALL
+       SELECT 'checkin' AS type, attendance_checkins.id, attendance_checkins.created_at, attendance_checkins.scan_day,
+              attendees.name AS attendee_name, attendees.ticket_code,
+              'Entrance' AS booth_name,
+              users.name AS scanned_by,
+              NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question, NULL AS new_info,
+              NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
+       FROM attendance_checkins
+       JOIN attendees ON attendees.id = attendance_checkins.attendee_id
+       JOIN users ON users.id = attendance_checkins.checked_in_by_user_id
+       ${checkinWhere}
        ORDER BY created_at DESC
        LIMIT 250`,
       params
@@ -256,6 +355,20 @@ function getRequestedBoothId(req) {
 
 function normalizeAttendanceDays(days) {
   return Array.isArray(days) && days.length ? days : EVENT_DAYS;
+}
+
+function buildBoothEligibility(visits, scanDay) {
+  const sameDayVisits = visits.filter((row) => (
+    formatScanDay(row.scan_day) === scanDay && row.booth_name?.toUpperCase() !== "FOOD DESK"
+  ));
+  const uniqueBooths = [...new Map(sameDayVisits.map((row) => [row.booth_id, row.booth_name])).values()];
+  return {
+    required: REQUIRED_FOOD_BOOTHS,
+    visited: uniqueBooths.length,
+    remaining: Math.max(0, REQUIRED_FOOD_BOOTHS - uniqueBooths.length),
+    eligible: uniqueBooths.length >= REQUIRED_FOOD_BOOTHS,
+    booths: uniqueBooths
+  };
 }
 
 function defaultScanDay(attendee) {

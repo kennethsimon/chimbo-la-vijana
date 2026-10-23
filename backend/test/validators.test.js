@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { registrationSchema, visitSchema } from "../src/validators.js";
+import { checkinSchema, createUserSchema, registrationSchema, visitSchema } from "../src/validators.js";
 
 test("registrationSchema accepts complete attendee registration data", () => {
   const result = registrationSchema.safeParse({
@@ -99,6 +99,25 @@ test("visitSchema accepts a complete structured booth survey", () => {
     satisfaction: 3,
     question: "Ninawezaje kupata TIN?",
     newInfo: "Usajili unaweza kufanyika mtandaoni"
+  });
+  assert.equal(result.success, true);
+});
+
+test("checkinSchema accepts a ticket and event day", () => {
+  const result = checkinSchema.safeParse({ ticketCode: "CLV-ABC234", scanDay: "2026-10-24" });
+  assert.equal(result.success, true);
+});
+
+test("checkinSchema rejects a day outside the event", () => {
+  const result = checkinSchema.safeParse({ ticketCode: "CLV-ABC234", scanDay: "2026-10-26" });
+  assert.equal(result.success, false);
+});
+
+test("createUserSchema supports combined entrance scanner roles", () => {
+  const result = createUserSchema.safeParse({
+    name: "Entrance Staff",
+    email: "entrance@example.com",
+    roles: ["checkin", "food"]
   });
   assert.equal(result.success, true);
 });

@@ -50,14 +50,25 @@ export const visitSchema = z.object({
   ticketCode: z.string().trim().min(4).max(80),
   boothId: z.string().uuid().optional().nullable(),
   scanDay: eventDaySchema,
+  surveyStatus: z.enum(["completed", "skipped"]).default("completed"),
+  purpose: z.enum(["question", "service", "issue_resolved"]).optional().nullable(),
   service: z.string().trim().max(160).optional().nullable(),
   satisfaction: z.coerce.number().int().min(1).max(3).optional().nullable(),
   question: z.string().trim().max(1000).optional().nullable(),
+  newInfo: z.string().trim().max(1000).optional().nullable(),
+  trainingInstitution: z.string().trim().max(160).optional().nullable(),
   surveyAnswers: z.array(z.object({
     id: z.string().trim().min(1).max(80),
     question: z.string().trim().min(1).max(240),
     answer: z.string().trim().max(800)
   })).max(12).optional().default([])
+}).superRefine((data, ctx) => {
+  if (data.surveyStatus === "skipped") return;
+  for (const field of ["purpose", "service", "satisfaction"]) {
+    if (data[field] === undefined || data[field] === null || data[field] === "") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: "This field is required for a completed survey" });
+    }
+  }
 });
 
 export const foodSchema = z.object({

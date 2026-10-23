@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { hasRole, requireAuth, requireRole } from "../auth.js";
 import { EVENT_DAYS, foodSchema, lookupSchema, validate, visitSchema } from "../validators.js";
+import { buildVisitSurveyAnswers, isTrainingCentre, servicesForBooth, TRAINING_INSTITUTIONS } from "../boothSurvey.js";
 
 export const exhibitorRouter = Router();
 
@@ -18,7 +19,8 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
       [attendee.id]
     );
     const { rows: visitRows } = await pool.query(
-      `SELECT visits.created_at, visits.service, visits.satisfaction, visits.question, visits.survey_answers, booths.name AS booth_name,
+      `SELECT visits.created_at, visits.purpose, visits.service, visits.satisfaction, visits.question, visits.new_info,
+              visits.training_institution, visits.survey_status, visits.survey_answers, booths.name AS booth_name,
               visits.scanned_by_user_id, visits.booth_id, visits.scan_day
        FROM visits
        JOIN booths ON booths.id = visits.booth_id
@@ -44,8 +46,12 @@ exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, n
         scanDay: formatScanDay(row.scan_day),
         scannedByUserId: row.scanned_by_user_id,
         service: row.service,
+        purpose: row.purpose,
         satisfaction: row.satisfaction,
         question: row.question,
+        newInfo: row.new_info,
+        trainingInstitution: row.training_institution,
+        surveyStatus: row.survey_status,
         surveyAnswers: row.survey_answers || [],
         createdAt: row.created_at
       })),
@@ -71,33 +77,50 @@ exhibitorRouter.post("/scans/visit", validate(visitSchema), async (req, res, nex
     if (!boothId) {
       return res.status(400).json({ error: "missing_booth", message: "Choose a booth before saving this booth scan" });
     }
-    if (hasRole(req.user, "admin") && req.validated.boothId) {
-      const booth = await pool.query("SELECT id FROM booths WHERE id = $1 AND is_active = true", [req.validated.boothId]);
-      if (!booth.rows[0]) return res.status(400).json({ error: "invalid_booth", message: "Selected booth is not active" });
-    }
+    const boothResult = await pool.query("SELECT id, name, is_active FROM booths WHERE id = $1", [boothId]);
+    const booth = boothResult.rows[0];
+    if (!booth?.is_active) return res.status(400).json({ error: "invalid_booth", message: "Selected booth is not active" });
     const attendee = await findAttendee(req.validated.ticketCode);
     if (!attendee) return res.status(404).json({ error: "not_found", message: "Ticket code was not found" });
     if (!isAllowedScanDay(attendee, req.validated.scanDay)) {
       return res.status(400).json({ error: "invalid_scan_day", message: "Tiketi hii haijachagua siku hii ya kuhudhuria." });
     }
 
+    const surveyValidation = validateBoothSurvey(booth.name, req.validated);
+    if (surveyValidation) {
+      return res.status(400).json({ error: "validation_error", message: surveyValidation });
+    }
+
+    const question = req.validated.purpose === "question" ? req.validated.question || null : null;
+    const surveyAnswers = buildVisitSurveyAnswers({ ...req.validated, question });
+
     try {
       const { rows } = await pool.query(
-        `INSERT INTO visits (attendee_id, booth_id, scanned_by_user_id, scan_day, service, satisfaction, question, survey_answers)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO visits (
+           attendee_id, booth_id, scanned_by_user_id, scan_day, purpose, service, satisfaction,
+           question, new_info, training_institution, survey_status, survey_answers
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           attendee.id,
           boothId,
           req.user.id,
           req.validated.scanDay,
+          req.validated.purpose || null,
           req.validated.service || null,
           req.validated.satisfaction || null,
-          req.validated.question || null,
-          JSON.stringify(req.validated.surveyAnswers || [])
+          question,
+          req.validated.newInfo || null,
+          req.validated.trainingInstitution || null,
+          req.validated.surveyStatus,
+          JSON.stringify(surveyAnswers)
         ]
       );
-      res.status(201).json({ ok: true, visit: { id: rows[0].id, createdAt: rows[0].created_at } });
+      res.status(201).json({
+        ok: true,
+        visit: { id: rows[0].id, surveyStatus: rows[0].survey_status, createdAt: rows[0].created_at }
+      });
     } catch (error) {
       if (error.code === "23505") {
         const { rows } = await pool.query(
@@ -173,7 +196,8 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
               attendees.name AS attendee_name, attendees.ticket_code,
               booths.name AS booth_name,
               users.name AS scanned_by,
-              visits.service, visits.satisfaction, visits.question, visits.survey_answers
+              visits.purpose, visits.service, visits.satisfaction, visits.question, visits.new_info,
+              visits.training_institution, visits.survey_status, visits.survey_answers
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
        JOIN booths ON booths.id = visits.booth_id
@@ -184,7 +208,8 @@ exhibitorRouter.get("/scans/history", async (req, res, next) => {
               attendees.name AS attendee_name, attendees.ticket_code,
               'Food desk' AS booth_name,
               users.name AS scanned_by,
-              NULL AS service, NULL AS satisfaction, NULL AS question, '[]'::jsonb AS survey_answers
+              NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question, NULL AS new_info,
+              NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
        JOIN users ON users.id = food_claims.claimed_by_user_id
@@ -254,5 +279,26 @@ function isAllowedScanDay(attendee, scanDay) {
 
 function formatScanDay(value) {
   return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+function validateBoothSurvey(boothName, survey) {
+  const isSkipped = survey.surveyStatus === "skipped";
+  const availableServices = servicesForBooth(boothName);
+
+  if (!isSkipped && (!survey.purpose || !survey.service || !survey.satisfaction)) {
+    return "Jaza alichokuja kufanya, huduma aliyopata na kiwango cha kuridhika.";
+  }
+  if (survey.service && availableServices.length && !availableServices.includes(survey.service)) {
+    return "Huduma iliyochaguliwa haipatikani kwenye banda hili.";
+  }
+  if (isTrainingCentre(boothName)) {
+    if (!isSkipped && !survey.trainingInstitution) return "Chagua taasisi iliyotoa mafunzo.";
+    if (survey.trainingInstitution && !TRAINING_INSTITUTIONS.includes(survey.trainingInstitution)) {
+      return "Taasisi iliyotoa mafunzo haijatambulika.";
+    }
+  } else if (survey.trainingInstitution) {
+    return "Taasisi ya mafunzo inaruhusiwa kwenye Training Centre pekee.";
+  }
+  return null;
 }
 

@@ -68,3 +68,38 @@ test("visitSchema enforces satisfaction range", () => {
   assert.equal(result.success, false);
 });
 
+test("visitSchema requires the core fields for a completed booth survey", () => {
+  const result = visitSchema.safeParse({
+    ticketCode: "CLV-ABC234",
+    scanDay: "2026-10-24",
+    surveyStatus: "completed",
+    purpose: "service"
+  });
+  assert.equal(result.success, false);
+  assert.ok(result.error.flatten().fieldErrors.service);
+  assert.ok(result.error.flatten().fieldErrors.satisfaction);
+});
+
+test("visitSchema accepts a skipped booth survey without answers", () => {
+  const result = visitSchema.safeParse({
+    ticketCode: "CLV-ABC234",
+    scanDay: "2026-10-24",
+    surveyStatus: "skipped"
+  });
+  assert.equal(result.success, true);
+});
+
+test("visitSchema accepts a complete structured booth survey", () => {
+  const result = visitSchema.safeParse({
+    ticketCode: "CLV-ABC234",
+    scanDay: "2026-10-24",
+    surveyStatus: "completed",
+    purpose: "question",
+    service: "Usajili wa TIN",
+    satisfaction: 3,
+    question: "Ninawezaje kupata TIN?",
+    newInfo: "Usajili unaweza kufanyika mtandaoni"
+  });
+  assert.equal(result.success, true);
+});
+

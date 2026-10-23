@@ -85,6 +85,17 @@ function Scans({ user }) {
 
 function SurveySummary({ scan }) {
   const answers = Array.isArray(scan.survey_answers) ? scan.survey_answers : [];
+  const extraAnswers = answers.filter((answer) => !["surveyStatus", "purpose", "service", "trainingInstitution", "satisfaction", "question", "newInfo"].includes(answer.id));
+  if (scan.type === "food") return <span className="text-sm text-muted-foreground">-</span>;
+  if (scan.survey_status === "skipped") {
+    return (
+      <div className="grid gap-1">
+        <Badge tone="warn">Survey imerukwa</Badge>
+        {scan.purpose ? <span className="text-xs text-muted-foreground">{purposeLabel(scan.purpose)}</span> : null}
+        {scan.service ? <span className="text-xs text-muted-foreground">{scan.service}</span> : null}
+      </div>
+    );
+  }
   if (!answers.length) {
     return (
       <>
@@ -97,16 +108,24 @@ function SurveySummary({ scan }) {
 
   return (
     <div className="grid gap-1">
+      <div className="flex flex-wrap gap-1"><Badge tone="ok">Imekamilika</Badge>{scan.purpose ? <Badge tone="neutral">{purposeLabel(scan.purpose)}</Badge> : null}</div>
       <strong className="text-sm">{scan.service || "Survey"}</strong>
+      {scan.training_institution ? <div className="text-xs text-muted-foreground">Mtoa mafunzo: {scan.training_institution}</div> : null}
       <div className="text-sm text-muted-foreground">Kuridhika: {scan.satisfaction || "-"}</div>
-      {answers.slice(0, 2).map((answer) => (
+      {scan.question ? <div className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Swali:</span> {scan.question}</div> : null}
+      {scan.new_info ? <div className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Taarifa mpya:</span> {scan.new_info}</div> : null}
+      {extraAnswers.slice(0, 2).map((answer) => (
         <div className="text-xs text-muted-foreground" key={answer.id}>
           <span className="font-semibold text-foreground">{answer.question}</span>: {answer.answer}
         </div>
       ))}
-      {answers.length > 2 ? <span className="text-xs font-semibold text-primary">+{answers.length - 2} majibu zaidi</span> : null}
+      {extraAnswers.length > 2 ? <span className="text-xs font-semibold text-primary">+{extraAnswers.length - 2} majibu zaidi</span> : null}
     </div>
   );
+}
+
+function purposeLabel(value) {
+  return ({ question: "Ameuliza swali", service: "Amepata huduma", issue_resolved: "Ametatua changamoto" })[value] || value;
 }
 
 function hasRole(user, role) {

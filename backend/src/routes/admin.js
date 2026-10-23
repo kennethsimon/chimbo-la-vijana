@@ -20,7 +20,8 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
 
     const { rows } = await pool.query(
       `WITH scan_rows AS (
-        SELECT 'booth' AS type, visits.id, visits.service, visits.satisfaction, visits.question, visits.survey_answers, visits.created_at, visits.scan_day,
+        SELECT 'booth' AS type, visits.id, visits.purpose, visits.service, visits.satisfaction, visits.question,
+                visits.new_info, visits.training_institution, visits.survey_status, visits.survey_answers, visits.created_at, visits.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 booths.name AS booth_name,
                 users.name AS scanned_by
@@ -30,7 +31,8 @@ adminRouter.get("/scans", requireAuth, requireRole("admin", "exhibitor", "food")
          JOIN users ON users.id = visits.scanned_by_user_id
          ${visitWhere}
          UNION ALL
-         SELECT 'food' AS type, food_claims.id, NULL AS service, NULL AS satisfaction, NULL AS question, '[]'::jsonb AS survey_answers, food_claims.created_at, food_claims.scan_day,
+         SELECT 'food' AS type, food_claims.id, NULL AS purpose, NULL AS service, NULL AS satisfaction, NULL AS question,
+                NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers, food_claims.created_at, food_claims.scan_day,
                 attendees.name AS attendee_name, attendees.ticket_code,
                 'Food desk' AS booth_name,
                 users.name AS scanned_by
@@ -59,7 +61,8 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
     if (!hasRole(req.user, "admin")) params.push(req.user.id);
     const { rows } = await pool.query(
       `SELECT 'booth' AS type, visits.created_at, visits.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
-              booths.name AS booth_name, users.name AS scanned_by, visits.service, visits.satisfaction, visits.question, visits.survey_answers
+              booths.name AS booth_name, users.name AS scanned_by, visits.purpose, visits.service, visits.satisfaction,
+              visits.question, visits.new_info, visits.training_institution, visits.survey_status, visits.survey_answers
        FROM visits
        JOIN attendees ON attendees.id = visits.attendee_id
        JOIN booths ON booths.id = visits.booth_id
@@ -67,7 +70,8 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        ${visitWhere}
        UNION ALL
        SELECT 'food' AS type, food_claims.created_at, food_claims.scan_day, attendees.name AS attendee_name, attendees.ticket_code,
-              'Food desk' AS booth_name, users.name AS scanned_by, NULL AS service, NULL AS satisfaction, NULL AS question, '[]'::jsonb AS survey_answers
+              'Food desk' AS booth_name, users.name AS scanned_by, NULL AS purpose, NULL AS service, NULL AS satisfaction,
+              NULL AS question, NULL AS new_info, NULL AS training_institution, NULL AS survey_status, '[]'::jsonb AS survey_answers
        FROM food_claims
        JOIN attendees ON attendees.id = food_claims.attendee_id
        JOIN users ON users.id = food_claims.claimed_by_user_id
@@ -75,7 +79,7 @@ adminRouter.get("/scans/export", requireAuth, requireRole("admin", "exhibitor", 
        ORDER BY created_at DESC`,
       params
     );
-    sendCsv(res, "scans.csv", ["type", "scan_day", "created_at", "attendee_name", "ticket_code", "booth_name", "scanned_by", "service", "satisfaction", "question", "survey_answers"], rows.map((row) => ({
+    sendCsv(res, "scans.csv", ["type", "scan_day", "created_at", "attendee_name", "ticket_code", "booth_name", "scanned_by", "survey_status", "purpose", "service", "training_institution", "satisfaction", "question", "new_info", "survey_answers"], rows.map((row) => ({
       ...row,
       survey_answers: JSON.stringify(row.survey_answers || [])
     })));
@@ -110,7 +114,14 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       registrationTrend,
       smsStatus,
       smsDeliveryStatus,
-      emailStatus
+      emailStatus,
+      visitPurposes,
+      visitPurposesByBooth,
+      topServicesByBooth,
+      satisfactionSummary,
+      recentQuestions,
+      recentNewInfo,
+      surveyStatus
     ] = await Promise.all([
       pool.query("SELECT count(*)::int AS n FROM attendees"),
       pool.query("SELECT count(*)::int AS n FROM food_claims"),
@@ -263,6 +274,67 @@ adminRouter.get("/dashboard", async (req, res, next) => {
          WHERE template = 'registration_ticket'
          GROUP BY status
          ORDER BY count DESC, status`
+      ),
+      pool.query(
+        `SELECT purpose AS label, count(*)::int AS count
+         FROM visits
+         WHERE purpose IS NOT NULL
+         GROUP BY purpose
+         ORDER BY count DESC, purpose`
+      ),
+      pool.query(
+        `SELECT booths.name AS booth_name, visits.purpose AS label, count(*)::int AS count
+         FROM visits
+         JOIN booths ON booths.id = visits.booth_id
+         WHERE visits.purpose IS NOT NULL
+         GROUP BY booths.id, visits.purpose
+         ORDER BY booths.name, count DESC`
+      ),
+      pool.query(
+        `WITH ranked AS (
+           SELECT booths.name AS booth_name, visits.service, count(*)::int AS count,
+                  row_number() OVER (PARTITION BY booths.id ORDER BY count(*) DESC, visits.service) AS rank
+           FROM visits
+           JOIN booths ON booths.id = visits.booth_id
+           WHERE visits.service IS NOT NULL AND visits.service <> ''
+           GROUP BY booths.id, visits.service
+         )
+         SELECT booth_name, service, count
+         FROM ranked
+         WHERE rank = 1
+         ORDER BY count DESC, booth_name`
+      ),
+      pool.query(
+        `SELECT round(avg(satisfaction)::numeric, 2) AS average,
+                count(satisfaction)::int AS responses
+         FROM visits
+         WHERE satisfaction IS NOT NULL`
+      ),
+      pool.query(
+        `SELECT visits.question, attendees.name AS attendee_name, attendees.ticket_code,
+                booths.name AS booth_name, visits.created_at
+         FROM visits
+         JOIN attendees ON attendees.id = visits.attendee_id
+         JOIN booths ON booths.id = visits.booth_id
+         WHERE visits.question IS NOT NULL AND visits.question <> ''
+         ORDER BY visits.created_at DESC
+         LIMIT 10`
+      ),
+      pool.query(
+        `SELECT visits.new_info, attendees.name AS attendee_name, attendees.ticket_code,
+                booths.name AS booth_name, visits.created_at
+         FROM visits
+         JOIN attendees ON attendees.id = visits.attendee_id
+         JOIN booths ON booths.id = visits.booth_id
+         WHERE visits.new_info IS NOT NULL AND visits.new_info <> ''
+         ORDER BY visits.created_at DESC
+         LIMIT 10`
+      ),
+      pool.query(
+        `SELECT survey_status AS label, count(*)::int AS count
+         FROM visits
+         GROUP BY survey_status
+         ORDER BY count DESC, survey_status`
       )
     ]);
 
@@ -303,6 +375,15 @@ adminRouter.get("/dashboard", async (req, res, next) => {
           { label: "Claimed", count: foodClaimCount },
           { label: "Not claimed", count: Math.max(0, attendeeCount - foodClaimCount) }
         ]
+      },
+      boothSurvey: {
+        purposes: visitPurposes.rows,
+        purposesByBooth: visitPurposesByBooth.rows,
+        topServicesByBooth: topServicesByBooth.rows,
+        satisfaction: satisfactionSummary.rows[0],
+        recentQuestions: recentQuestions.rows,
+        recentNewInfo: recentNewInfo.rows,
+        surveyStatus: surveyStatus.rows
       }
     });
   } catch (error) {
@@ -511,7 +592,8 @@ adminRouter.get("/attendees/:id", requireAuth, requireRole("admin"), async (req,
 
     const [visits, foodClaims, emails] = await Promise.all([
       pool.query(
-        `SELECT visits.id, visits.scan_day, visits.service, visits.satisfaction, visits.question, visits.survey_answers, visits.created_at,
+        `SELECT visits.id, visits.scan_day, visits.purpose, visits.service, visits.satisfaction, visits.question,
+                visits.new_info, visits.training_institution, visits.survey_status, visits.survey_answers, visits.created_at,
                 booths.name AS booth_name,
                 users.name AS scanned_by
          FROM visits

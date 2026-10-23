@@ -5,6 +5,7 @@ import { Building2, Camera, CheckCircle2, ClipboardList, Search, Utensils, X } f
 import { RequireAuth } from "../../../components/RequireAuth";
 import { api, post } from "../../../lib/api";
 import { SERVICES } from "../../../lib/regions";
+import { isTrainingCentre, PURPOSE_OPTIONS, SATISFACTION_OPTIONS, servicesForBooth, TRAINING_INSTITUTIONS } from "../../../lib/boothSurvey";
 import { useToast } from "../../../components/ToastProvider";
 import { Badge, Button, Card, CardContent, Field, PageHeader, SelectInput, Spinner, TextInput } from "../../../components/ui";
 
@@ -138,15 +139,25 @@ function Scanner({ user }) {
     }
   }
 
-  async function saveVisit() {
+  async function saveVisit(surveyStatus = "completed") {
     if (requiresBoothChoice && !selectedBoothId) {
       toast.warning("Chagua banda kabla ya kuhifadhi ziara.");
       return;
     }
     setLoading("visit");
     try {
-      const result = await post("/exhibitor/scans/visit", scanPayload({ ticketCode, ...visit }));
-      toast.success(`Visit saved at ${new Date(result.visit.createdAt).toLocaleTimeString()}`);
+      const surveyPayload = surveyStatus === "skipped"
+        ? {
+            purpose: visit.purpose || null,
+            service: visit.service || null,
+            trainingInstitution: visit.trainingInstitution || null,
+            surveyStatus
+          }
+        : { ...visit, surveyStatus };
+      const result = await post("/exhibitor/scans/visit", scanPayload({ ticketCode, ...surveyPayload }));
+      toast.success(surveyStatus === "skipped"
+        ? "Ziara imehifadhiwa na tathmini imerukwa."
+        : `Survey na ziara zimehifadhiwa saa ${new Date(result.visit.createdAt).toLocaleTimeString()}`);
       setSurveyOpen(false);
       await lookupTicket(ticketCode);
     } catch (error) {
@@ -347,17 +358,16 @@ function Scanner({ user }) {
 }
 
 function BoothSurveySheet({ attendee, boothName, disabled, loading, scanDay, visit, setVisit, onClose, onSave }) {
-  const answeredCount = SURVEY_QUESTIONS.filter((question) => visit.answers[question.id]?.trim()).length;
+  const trainingCentre = isTrainingCentre(boothName);
+  const serviceOptions = servicesForBooth(boothName);
+  const canSubmit = visit.purpose && visit.service && visit.satisfaction && (!trainingCentre || visit.trainingInstitution);
 
-  function updateAnswer(id, answer) {
-    const answers = { ...visit.answers, [id]: answer };
-    setVisit({
-      service: answers.service || "",
-      satisfaction: Number.parseInt(answers.satisfaction || "3", 10),
-      question: buildSurveySummary(answers),
-      surveyAnswers: buildSurveyAnswers(answers),
-      answers
-    });
+  function updateField(field, value) {
+    setVisit((current) => ({
+      ...current,
+      [field]: value,
+      ...(field === "purpose" && value !== "question" ? { question: "" } : {})
+    }));
   }
 
   return (
@@ -374,35 +384,73 @@ function BoothSurveySheet({ attendee, boothName, disabled, loading, scanDay, vis
           </button>
         </div>
         <div className="grid max-h-[60vh] gap-4 overflow-y-auto p-4 sm:p-5">
-          {SURVEY_QUESTIONS.map((question, index) => (
-            <div className="grid gap-2 rounded-md border bg-background p-3" key={question.id}>
-              <label className="text-sm font-semibold text-foreground">{index + 1}. {question.label}</label>
-              {question.type === "select" ? (
-                <SelectInput value={visit.answers[question.id] || ""} onChange={(event) => updateAnswer(question.id, event.target.value)}>
-                  <option value="">Chagua jibu</option>
-                  {question.options.map((option) => <option key={option} value={option}>{option}</option>)}
-                </SelectInput>
-              ) : (
-                <textarea
-                  className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
-                  value={visit.answers[question.id] || ""}
-                  onChange={(event) => updateAnswer(question.id, event.target.value)}
-                  placeholder={question.placeholder || "Andika jibu hapa"}
-                />
-              )}
-            </div>
-          ))}
+          <SurveyField index={1} label="Alichokuja kufanya" required>
+            <SelectInput value={visit.purpose} onChange={(event) => updateField("purpose", event.target.value)}>
+              <option value="">Chagua sababu ya ziara</option>
+              {PURPOSE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </SelectInput>
+          </SurveyField>
+
+          <SurveyField index={2} label={trainingCentre ? "Mada ya kikao alichohudhuria" : "Huduma maalum aliyopata"} required>
+            {trainingCentre ? (
+              <TextInput value={visit.service} onChange={(event) => updateField("service", event.target.value)} placeholder="Andika mada ya kikao" />
+            ) : (
+              <SelectInput value={visit.service} onChange={(event) => updateField("service", event.target.value)}>
+                <option value="">Chagua huduma</option>
+                {(serviceOptions.length ? serviceOptions : SERVICES).map((option) => <option key={option} value={option}>{option}</option>)}
+              </SelectInput>
+            )}
+          </SurveyField>
+
+          {trainingCentre ? (
+            <SurveyField index={3} label="Taasisi iliyotoa mafunzo" required>
+              <SelectInput value={visit.trainingInstitution} onChange={(event) => updateField("trainingInstitution", event.target.value)}>
+                <option value="">Chagua taasisi</option>
+                {TRAINING_INSTITUTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+              </SelectInput>
+            </SurveyField>
+          ) : null}
+
+          <SurveyField index={trainingCentre ? 4 : 3} label="Kuridhika" required>
+            <SelectInput value={visit.satisfaction} onChange={(event) => updateField("satisfaction", event.target.value)}>
+              <option value="">Chagua kiwango</option>
+              {SATISFACTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </SelectInput>
+          </SurveyField>
+
+          {visit.purpose === "question" ? (
+            <SurveyField index={trainingCentre ? 5 : 4} label="Aliuliza swali gani?">
+              <SurveyTextarea value={visit.question} onChange={(event) => updateField("question", event.target.value)} placeholder="Andika swali la mshiriki" />
+            </SurveyField>
+          ) : null}
+
+          <SurveyField index={trainingCentre ? (visit.purpose === "question" ? 6 : 5) : (visit.purpose === "question" ? 5 : 4)} label="Taarifa mpya aliyopata asiyoijua awali">
+            <SurveyTextarea value={visit.newInfo} onChange={(event) => updateField("newInfo", event.target.value)} placeholder="Hiari: andika taarifa mpya aliyojifunza" />
+          </SurveyField>
         </div>
         <div className="grid gap-3 border-t bg-card p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:p-5">
-          <p className="text-sm text-muted-foreground">{answeredCount}/{SURVEY_QUESTIONS.length} maswali yamejibiwa</p>
-          <Button variant="secondary" onClick={onClose} type="button">Baadaye</Button>
-          <Button disabled={disabled || loading} onClick={onSave} type="button">
-            {loading ? <Spinner /> : <Building2 size={18} />} Hifadhi survey na ziara
+          <p className="text-sm text-muted-foreground">Sehemu zenye alama * ni lazima kwa survey kamili.</p>
+          <Button disabled={disabled || loading} variant="secondary" onClick={() => onSave("skipped")} type="button">Ruka survey</Button>
+          <Button disabled={disabled || loading || !canSubmit} onClick={() => onSave("completed")} type="button">
+            {loading ? <Spinner /> : <Building2 size={18} />} Tuma na hifadhi ziara
           </Button>
         </div>
       </div>
     </div>
   );
+}
+
+function SurveyField({ index, label, required = false, children }) {
+  return (
+    <div className="grid gap-2 rounded-md border bg-background p-3">
+      <label className="text-sm font-semibold text-foreground">{index}. {label}{required ? " *" : ""}</label>
+      {children}
+    </div>
+  );
+}
+
+function SurveyTextarea(props) {
+  return <textarea className="min-h-24 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:ring-2 focus:ring-ring" {...props} />;
 }
 
 function hasRole(user, role) {
@@ -434,68 +482,14 @@ function formatAttendanceDays(days = []) {
   return formatEventDay(days[0]);
 }
 
-const SURVEY_QUESTIONS = [
-  {
-    id: "service",
-    label: "Ni huduma au fursa gani imemvutia zaidi kwenye banda hili?",
-    type: "select",
-    options: SERVICES
-  },
-  {
-    id: "satisfaction",
-    label: "Ameridhika kiasi gani na maelezo aliyopata?",
-    type: "select",
-    options: ["1 - Hajaridhika", "2 - Wastani", "3 - Ameridhika"]
-  },
-  {
-    id: "understanding",
-    label: "Ameelewa huduma/fursa iliyotolewa?",
-    type: "select",
-    options: ["Ndiyo, ameelewa vizuri", "Ameelewa kwa kiasi", "Bado anahitaji maelezo zaidi"]
-  },
-  {
-    id: "supportNeeded",
-    label: "Ni msaada gani au taarifa gani zaidi anahitaji?",
-    type: "textarea",
-    placeholder: "Mfano: mawasiliano, mafunzo, bei, usajili, au hatua inayofuata"
-  },
-  {
-    id: "followUp",
-    label: "Angependa kufuatiliwa baada ya tukio?",
-    type: "select",
-    options: ["Ndiyo", "Hapana", "Atafikiria kwanza"]
-  },
-  {
-    id: "notes",
-    label: "Maoni mengine kutoka kwa mshiriki",
-    type: "textarea",
-    placeholder: "Hiari"
-  }
-];
-
 function defaultVisit() {
-  const answers = { service: SERVICES[0], satisfaction: "3 - Ameridhika" };
   return {
-    service: answers.service,
-    satisfaction: 3,
-    question: buildSurveySummary(answers),
-    surveyAnswers: buildSurveyAnswers(answers),
-    answers
+    purpose: "",
+    service: "",
+    satisfaction: "",
+    question: "",
+    newInfo: "",
+    trainingInstitution: ""
   };
-}
-
-function buildSurveyAnswers(answers) {
-  return SURVEY_QUESTIONS.map((question) => ({
-    id: question.id,
-    question: question.label,
-    answer: answers[question.id] || ""
-  })).filter((item) => item.answer.trim());
-}
-
-function buildSurveySummary(answers) {
-  return buildSurveyAnswers(answers)
-    .map((item) => `${item.question}: ${item.answer}`)
-    .join(" | ")
-    .slice(0, 1000);
 }
 

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { pool } from "../src/db.js";
 
 const booths = [
+  "Wizara ya Vijana",
   "TISEZA",
   "NSSF",
   "NHIF",
@@ -10,13 +11,18 @@ const booths = [
   "TCRA",
   "NHC",
   "BODI YA MIKOPO",
+  "HESLB",
   "HALMASHAURI",
   "IMMIGRATION",
+  "Traffic Police",
   "RITA",
   "BRELA",
   "TRA",
   "TIRA",
   "UTT AMIS",
+  "PPRA",
+  "NIDA",
+  "Training Centre",
   "DSE",
   "FOOD DESK"
 ];

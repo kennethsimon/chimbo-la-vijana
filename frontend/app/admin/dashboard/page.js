@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  CircleHelp,
+  Lightbulb,
   Mail,
   MessageSquareText,
   QrCode,
@@ -128,6 +130,31 @@ function Dashboard() {
         </Panel>
         <Panel title="Recent activity" description="Latest registrations, booth scans, and food claims">
           <RecentActivity rows={data.recentActivity || []} />
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Panel title="Booth survey outcomes" description="Why attendees visited and whether the short survey was completed">
+          <div className="grid gap-6 lg:grid-cols-[0.7fr_1fr_1fr] lg:items-center">
+            <SatisfactionScore data={data.boothSurvey?.satisfaction} />
+            <DonutChart rows={labelPurposeRows(data.boothSurvey?.purposes)} centerLabel="Visits" />
+            <DonutChart rows={labelSurveyStatusRows(data.boothSurvey?.surveyStatus)} centerLabel="Surveys" />
+          </div>
+        </Panel>
+        <Panel title="Top service by booth" description="Most recorded service at each institution">
+          <TopServices rows={data.boothSurvey?.topServicesByBooth || []} />
+        </Panel>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <Panel title="Visit purpose by booth" description="Questions, services, and resolved issues for every booth">
+          <PurposeByBooth rows={data.boothSurvey?.purposesByBooth || []} />
+        </Panel>
+        <Panel title="Attendee learning" description="Recent questions and new information captured at booths">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <InsightFeed icon={<CircleHelp size={17} />} title="Recent questions" rows={data.boothSurvey?.recentQuestions || []} textKey="question" />
+            <InsightFeed icon={<Lightbulb size={17} />} title="New information learned" rows={data.boothSurvey?.recentNewInfo || []} textKey="new_info" />
+          </div>
         </Panel>
       </section>
     </div>
@@ -325,6 +352,94 @@ function RecentActivity({ rows = [] }) {
       ))}
     </div>
   );
+}
+
+function SatisfactionScore({ data = {} }) {
+  const average = Number(data?.average || 0);
+  const responses = Number(data?.responses || 0);
+  return (
+    <div className="grid place-items-center rounded-lg border bg-secondary/30 p-5 text-center">
+      <span className="text-xs font-semibold uppercase text-muted-foreground">Average satisfaction</span>
+      <strong className="mt-2 text-4xl font-semibold text-foreground">{responses ? average.toFixed(2) : "-"}<span className="text-lg text-muted-foreground">/3</span></strong>
+      <span className="mt-1 text-xs text-muted-foreground">{formatNumber(responses)} responses</span>
+    </div>
+  );
+}
+
+function TopServices({ rows = [] }) {
+  if (!rows.length) return <EmptyState title="No booth services yet" />;
+  return (
+    <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
+      {rows.map((row) => (
+        <div className="grid gap-1 rounded-lg border px-3 py-2.5" key={row.booth_name}>
+          <div className="flex items-center justify-between gap-3">
+            <strong className="text-sm text-foreground">{row.booth_name}</strong>
+            <Badge tone="neutral">{formatNumber(row.count)}</Badge>
+          </div>
+          <span className="text-xs text-muted-foreground">{row.service}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PurposeByBooth({ rows = [] }) {
+  if (!rows.length) return <EmptyState title="No booth purpose data yet" />;
+  const grouped = rows.reduce((result, row) => {
+    const booth = row.booth_name || "Unknown booth";
+    result[booth] ||= [];
+    result[booth].push({ label: purposeLabel(row.label), count: Number(row.count || 0) });
+    return result;
+  }, {});
+  return (
+    <div className="grid max-h-[28rem] gap-4 overflow-y-auto pr-1">
+      {Object.entries(grouped).map(([booth, items]) => {
+        const total = items.reduce((sum, item) => sum + item.count, 0);
+        return (
+          <div className="grid gap-2" key={booth}>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <strong className="text-foreground">{booth}</strong>
+              <span className="text-muted-foreground">{formatNumber(total)} visits</span>
+            </div>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-secondary">
+              {items.map((item, index) => <span key={item.label} style={{ width: `${percentage(item.count, total)}%`, backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />)}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {items.map((item, index) => <span key={item.label}><i className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }} />{item.label}: {item.count}</span>)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InsightFeed({ icon, title, rows = [], textKey }) {
+  return (
+    <div className="grid content-start gap-3">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">{icon}{title}</h3>
+      {!rows.length ? <EmptyState title="No entries yet" /> : rows.map((row, index) => (
+        <div className="rounded-lg border p-3" key={`${row.ticket_code}-${row.created_at}-${index}`}>
+          <p className="text-sm text-foreground">{row[textKey]}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span>{row.attendee_name}</span><span>·</span><span>{row.booth_name}</span><span>·</span><span>{new Date(row.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function purposeLabel(value) {
+  return ({ question: "Asked a question", service: "Received a service", issue_resolved: "Resolved an issue" })[value] || value;
+}
+
+function labelPurposeRows(rows = []) {
+  return rows.map((row) => ({ ...row, label: purposeLabel(row.label) }));
+}
+
+function labelSurveyStatusRows(rows = []) {
+  return rows.map((row) => ({ ...row, label: row.label === "completed" ? "Completed" : row.label === "skipped" ? "Skipped" : row.label }));
 }
 
 function normalizeRows(rows = []) {

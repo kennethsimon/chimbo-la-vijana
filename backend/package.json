@@ -10,6 +10,7 @@
     "build": "node --check src/server.js",
     "db:migrate": "node scripts/migrate.js",
     "db:seed": "node scripts/seed.js",
+    "sms:retry-failed": "node scripts/retry-failed-sms.js",
     "test": "node --test"
   },
   "dependencies": {

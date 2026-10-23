@@ -4,6 +4,7 @@ import { generateTicketCode } from "../codegen.js";
 import { pool, withTransaction } from "../db.js";
 import { sendTicketEmail } from "../email.js";
 import { sendRegistrationSms } from "../sms.js";
+import { recordRegistrationSmsAttempt } from "../sms-retries.js";
 import { registrationSchema, validate } from "../validators.js";
 
 export const publicRouter = Router();
@@ -28,11 +29,7 @@ publicRouter.post(
         );
       }
 
-      await pool.query(
-        `INSERT INTO sms_logs (attendee_id, to_phone, template, provider_message_id, status, error, response)
-         VALUES ($1, $2, 'registration_ticket_sms', $3, $4, $5, $6)`,
-        [attendee.id, attendee.phone, smsResult.messageId, smsResult.status, smsResult.error, smsResult.response]
-      );
+      await recordRegistrationSmsAttempt({ attendee, result: smsResult });
 
       res.status(201).json({
         ok: true,

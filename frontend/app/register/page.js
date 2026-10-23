@@ -69,11 +69,16 @@ export default function RegisterPage() {
       setStatus({
         type: "ok",
         ticketCode: result.attendee.ticketCode,
-        email: result.attendee.email
+        email: result.attendee.email,
+        smsStatus: result.sms.status
       });
-      toast.success(result.attendee.email
-        ? t("registrationSuccessEmail").replace("{ticketCode}", result.attendee.ticketCode)
-        : t("registrationSuccessSms").replace("{ticketCode}", result.attendee.ticketCode));
+      const smsFailed = result.sms.status !== "sent";
+      const successMessage = smsFailed
+        ? t("registrationSmsFailed")
+        : result.attendee.email ? t("registrationSuccessEmail") : t("registrationSuccessSms");
+      smsFailed
+        ? toast.error(successMessage.replace("{ticketCode}", result.attendee.ticketCode))
+        : toast.success(successMessage.replace("{ticketCode}", result.attendee.ticketCode));
       setForm(initialForm);
     } catch (error) {
       toast.error(error.message);
@@ -133,7 +138,7 @@ export default function RegisterPage() {
               {status?.type === "ok" ? (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100">
                   <div className="mb-2 flex items-center gap-2"><CheckCircle2 size={18} /> Umesajiliwa kikamilifu.</div>
-                  Tiketi yako ni <span className="rounded-md bg-card px-2 py-1 font-black text-primary">{status.ticketCode}</span>. {status.email ? `${t("checkEmail")}: ${status.email}` : t("checkSms")}
+                  Tiketi yako ni <span className="rounded-md bg-card px-2 py-1 font-black text-primary">{status.ticketCode}</span>. {status.smsStatus !== "sent" ? t("registrationSmsFailedInline") : status.email ? `${t("checkEmail")}: ${status.email}` : t("checkSms")}
                 </div>
               ) : null}
 

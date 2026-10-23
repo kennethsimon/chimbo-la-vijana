@@ -4,11 +4,43 @@ export function registrationSmsText(ticketCode) {
   return `Asante kwa kujisajili Chimbo la Vijana! Tunatazamia kukuona. Tiketi yako ni ${ticketCode}. Ihifadhi kwa ajili ya kuingia kwenye tukio.`;
 }
 
+export function parseSmsSendResponse(data) {
+  const message = Array.isArray(data?.messages) ? data.messages[0] : null;
+  if (!message) {
+    return {
+      status: "failed",
+      messageId: null,
+      providerReference: null,
+      providerStatusName: null,
+      providerStatusGroup: null,
+      error: "SMS provider returned no message result"
+    };
+  }
+
+  const providerStatusName = message.status?.name || null;
+  const providerStatusGroup = message.status?.groupName || null;
+  const rejected = providerStatusGroup === "REJECTED" || String(providerStatusName || "").startsWith("FAILED_");
+
+  return {
+    status: rejected ? "failed" : "sent",
+    messageId: message.messageId ? String(message.messageId) : null,
+    providerReference: String(message.messageId || message.sendReference || "") || null,
+    providerStatusName,
+    providerStatusGroup,
+    error: rejected
+      ? message.status?.description || providerStatusName || "SMS provider rejected the message"
+      : null
+  };
+}
+
 export async function sendRegistrationSms({ attendee, ticketCode }) {
   if (!config.smsApiToken || !config.smsSenderId) {
     return {
       status: "skipped",
       messageId: null,
+      providerReference: null,
+      providerStatusName: null,
+      providerStatusGroup: null,
       error: "SMS_API_TOKEN or SMS_SENDER_ID is not configured",
       response: null
     };
@@ -42,22 +74,26 @@ export async function sendRegistrationSms({ attendee, ticketCode }) {
       return {
         status: "failed",
         messageId: null,
+        providerReference: null,
+        providerStatusName: null,
+        providerStatusGroup: null,
         error: data.message || `SMS API returned HTTP ${response.status}`,
         response: data
       };
     }
 
-    const firstMessage = Array.isArray(data.messages) ? data.messages[0] : null;
+    const parsed = parseSmsSendResponse(data);
     return {
-      status: "sent",
-      messageId: firstMessage?.messageId ? String(firstMessage.messageId) : null,
-      error: null,
+      ...parsed,
       response: data
     };
   } catch (error) {
     return {
       status: "failed",
       messageId: null,
+      providerReference: null,
+      providerStatusName: null,
+      providerStatusGroup: null,
       error: error.message || "Failed to send SMS",
       response: null
     };

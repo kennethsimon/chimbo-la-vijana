@@ -4,6 +4,7 @@ import { hashPassword, hasRole, normalizeRoles, requireAuth, requireRole } from 
 import { pool } from "../db.js";
 import { buildTicketEmailTemplate, sendStaffCredentialsEmail } from "../email.js";
 import { getSmsDeliveryReport } from "../sms.js";
+import { retryFailedRegistrationSms, retrySmsLog } from "../sms-retries.js";
 import { createUserSchema, updateUserSchema, validate } from "../validators.js";
 
 export const adminRouter = Router();
@@ -116,7 +117,14 @@ adminRouter.get("/dashboard", async (req, res, next) => {
       pool.query("SELECT count(*)::int AS n FROM visits"),
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['exhibitor']::TEXT[] AND is_active = true"),
       pool.query("SELECT count(*)::int AS n FROM users WHERE roles @> ARRAY['food']::TEXT[] AND is_active = true"),
-      pool.query("SELECT count(DISTINCT attendee_id)::int AS n FROM sms_logs WHERE template = 'registration_ticket_sms' AND status = 'sent'"),
+      pool.query(
+        `WITH latest AS (
+           SELECT attendee_id, status,
+                  row_number() OVER (PARTITION BY attendee_id ORDER BY created_at DESC, id DESC) AS row_number
+           FROM sms_logs WHERE template = 'registration_ticket_sms'
+         )
+         SELECT count(*)::int AS n FROM latest WHERE row_number = 1 AND status = 'sent'`
+      ),
       pool.query("SELECT count(*)::int AS n FROM attendees WHERE email IS NOT NULL"),
       pool.query("SELECT count(DISTINCT attendee_id)::int AS n FROM email_logs WHERE template = 'registration_ticket' AND status = 'sent'"),
       pool.query(
@@ -230,18 +238,24 @@ adminRouter.get("/dashboard", async (req, res, next) => {
          ORDER BY sort_date ASC`
       ),
       pool.query(
-        `SELECT status AS label, count(*)::int AS count
-         FROM sms_logs
-         WHERE template = 'registration_ticket_sms'
-         GROUP BY status
-         ORDER BY count DESC, status`
+        `WITH latest AS (
+           SELECT status,
+                  row_number() OVER (PARTITION BY attendee_id ORDER BY created_at DESC, id DESC) AS row_number
+           FROM sms_logs WHERE template = 'registration_ticket_sms'
+         )
+         SELECT status AS label, count(*)::int AS count
+         FROM latest WHERE row_number = 1
+         GROUP BY status ORDER BY count DESC, status`
       ),
       pool.query(
-        `SELECT coalesce(delivery_status_name, delivery_status, 'Pending report') AS label, count(*)::int AS count
-         FROM sms_logs
-         WHERE template = 'registration_ticket_sms' AND status = 'sent'
-         GROUP BY label
-         ORDER BY count DESC, label`
+        `WITH latest AS (
+           SELECT status, delivery_status_name, delivery_status,
+                  row_number() OVER (PARTITION BY attendee_id ORDER BY created_at DESC, id DESC) AS row_number
+           FROM sms_logs WHERE template = 'registration_ticket_sms'
+         )
+         SELECT coalesce(delivery_status_name, delivery_status, 'Pending report') AS label, count(*)::int AS count
+         FROM latest WHERE row_number = 1 AND status = 'sent'
+         GROUP BY label ORDER BY count DESC, label`
       ),
       pool.query(
         `SELECT status AS label, count(*)::int AS count
@@ -300,21 +314,61 @@ adminRouter.get("/sms-logs", async (req, res, next) => {
   try {
     const { page, pageSize, limit, offset } = getPagination(req);
     const { rows } = await pool.query(
-      `SELECT sms_logs.id, sms_logs.to_phone, sms_logs.template, sms_logs.provider_message_id, sms_logs.status, sms_logs.error,
+      `SELECT sms_logs.id, sms_logs.to_phone, sms_logs.template, sms_logs.provider_message_id,
+              sms_logs.provider_reference, sms_logs.provider_status_name, sms_logs.provider_status_group,
+              sms_logs.retry_of, sms_logs.status, sms_logs.error,
               sms_logs.delivery_status, sms_logs.delivery_status_name, sms_logs.delivery_group_name,
               sms_logs.provider_done_at, sms_logs.created_at,
-              attendees.name AS attendee_name, attendees.ticket_code
+              attendees.name AS attendee_name, attendees.ticket_code,
+              sms_logs.id = first_value(sms_logs.id) OVER (
+                PARTITION BY sms_logs.attendee_id ORDER BY sms_logs.created_at DESC, sms_logs.id DESC
+              ) AS is_latest
        FROM sms_logs
        LEFT JOIN attendees ON attendees.id = sms_logs.attendee_id
        ORDER BY sms_logs.created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
-    const total = await pool.query("SELECT count(*)::int AS n FROM sms_logs");
+    const [total, summary] = await Promise.all([
+      pool.query("SELECT count(*)::int AS n FROM sms_logs"),
+      pool.query(
+        `WITH latest AS (
+           SELECT status,
+                  row_number() OVER (PARTITION BY attendee_id ORDER BY created_at DESC, id DESC) AS row_number
+           FROM sms_logs WHERE template = 'registration_ticket_sms'
+         )
+         SELECT count(*)::int AS total,
+                count(*) FILTER (WHERE status = 'sent')::int AS sent,
+                count(*) FILTER (WHERE status = 'failed')::int AS failed,
+                count(*) FILTER (WHERE status = 'skipped')::int AS skipped
+         FROM latest WHERE row_number = 1`
+      )
+    ]);
     res.json({
       smsLogs: rows.map(mapSmsLog),
+      summary: summary.rows[0],
       pagination: paginationMeta({ page, pageSize, total: total.rows[0].n })
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/sms-logs/retry-failed", async (req, res, next) => {
+  try {
+    res.json(await retryFailedRegistrationSms({ limit: 1000 }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post("/sms-logs/:id/retry", async (req, res, next) => {
+  try {
+    const result = await retrySmsLog(req.params.id);
+    if (result.attempted === 0) {
+      return res.status(409).json({ error: "sms_already_sent", message: "The latest SMS attempt is not retryable." });
+    }
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -666,6 +720,11 @@ function mapSmsLog(row) {
     toPhone: row.to_phone,
     template: row.template,
     providerMessageId: row.provider_message_id,
+    providerReference: row.provider_reference,
+    providerStatusName: row.provider_status_name,
+    providerStatusGroup: row.provider_status_group,
+    retryOf: row.retry_of,
+    isLatest: row.is_latest,
     status: row.status,
     error: row.error,
     deliveryStatus: row.delivery_status,

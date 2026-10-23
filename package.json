@@ -8,7 +8,7 @@
     "dev:backend": "pnpm --filter backend dev",
     "dev:frontend": "pnpm --filter frontend dev",
     "build": "pnpm --filter backend build && pnpm --filter frontend build",
-    "test": "pnpm --filter backend test",
+    "test": "pnpm --filter backend test && pnpm --filter frontend test",
     "lint": "pnpm --filter frontend lint"
   },
   "packageManager": "pnpm@11.25.0"

@@ -6,6 +6,11 @@ import { changePasswordSchema, loginSchema, validate } from "../validators.js";
 
 export const authRouter = Router();
 
+authRouter.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 authRouter.post(
   "/login",
   rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: true, legacyHeaders: false }),

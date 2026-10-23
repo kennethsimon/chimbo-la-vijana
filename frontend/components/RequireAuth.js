@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { api } from "../lib/api";
+import { getStaffHome } from "../lib/authRouting.mjs";
 import { StaffHeader, StaffNav } from "./AppHeader";
 import { Button, Card, CardContent, Skeleton, Spinner } from "./ui";
 
@@ -15,11 +16,11 @@ export function RequireAuth({ role, children }) {
 
   useEffect(() => {
     let active = true;
-    api("/auth/me")
+    api("/auth/me", { cache: "no-store" })
       .then(({ user }) => {
         if (!active) return;
         if (role && !hasRole(user, role)) {
-          router.replace(hasRole(user, "admin") ? "/admin/dashboard" : "/exhibitor/scan");
+          router.replace(getStaffHome(user));
           return;
         }
         setState({ loading: false, user, error: "" });

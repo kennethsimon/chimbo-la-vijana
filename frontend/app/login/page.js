@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LogIn } from "lucide-react";
-import { post } from "../../lib/api";
+import { api, post } from "../../lib/api";
+import { getStaffHome } from "../../lib/authRouting.mjs";
 import { useToast } from "../../components/ToastProvider";
 import { Button, Card, CardContent, Field, Spinner, TextInput } from "../../components/ui";
 import { BrandMark } from "../../components/BrandMark";
@@ -12,10 +12,24 @@ import { ThemeToggle } from "../../components/ThemeToggle";
 import { LanguageSwitcher } from "../../components/LanguageProvider";
 
 export default function LoginPage() {
-  const router = useRouter();
   const toast = useToast();
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    api("/auth/me", { cache: "no-store" })
+      .then(({ user }) => {
+        if (active) window.location.replace(getStaffHome(user));
+      })
+      .catch(() => {
+        if (active) setCheckingSession(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -23,7 +37,7 @@ export default function LoginPage() {
     try {
       const { user } = await post("/auth/login", form);
       toast.success(`Welcome back, ${user.name}.`);
-      router.push(user.roles?.includes("admin") || user.role === "admin" ? "/admin/dashboard" : "/exhibitor/scan");
+      window.location.replace(getStaffHome(user));
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -61,9 +75,9 @@ export default function LoginPage() {
               <Field label="Nenosiri">
                 <TextInput type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
               </Field>
-              <Button disabled={loading} size="lg">
-                {loading ? <Spinner /> : <LogIn size={18} />}
-                {loading ? "Inaingia..." : "Ingia"}
+              <Button disabled={loading || checkingSession} size="lg">
+                {loading || checkingSession ? <Spinner /> : <LogIn size={18} />}
+                {checkingSession ? "Inakagua..." : loading ? "Inaingia..." : "Ingia"}
               </Button>
             </form>
           </CardContent>

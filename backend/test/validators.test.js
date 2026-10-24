@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkinSchema, createUserSchema, registrationSchema, visitSchema } from "../src/validators.js";
+import { attendeeSearchSchema, checkinSchema, createUserSchema, registrationSchema, visitSchema } from "../src/validators.js";
+import { normalizeAttendeePhoneSearch } from "../src/attendeeSearch.js";
 
 test("registrationSchema accepts complete attendee registration data", () => {
   const result = registrationSchema.safeParse({
@@ -120,5 +121,22 @@ test("createUserSchema supports combined entrance scanner roles", () => {
     roles: ["checkin", "food"]
   });
   assert.equal(result.success, true);
+});
+
+test("attendeeSearchSchema accepts names, phone numbers, and ticket codes", () => {
+  for (const query of ["Asha Juma", "0687615616", "CLV-ABC234"]) {
+    assert.equal(attendeeSearchSchema.safeParse({ query }).success, true);
+  }
+});
+
+test("attendeeSearchSchema rejects overly broad one-character searches", () => {
+  assert.equal(attendeeSearchSchema.safeParse({ query: "A" }).success, false);
+});
+
+test("normalizeAttendeePhoneSearch matches supported Tanzanian formats", () => {
+  assert.equal(normalizeAttendeePhoneSearch("0687 615 616"), "255687615616");
+  assert.equal(normalizeAttendeePhoneSearch("255687615616"), "255687615616");
+  assert.equal(normalizeAttendeePhoneSearch("+255 687 615 616"), "255687615616");
+  assert.equal(normalizeAttendeePhoneSearch("Asha Juma"), null);
 });
 

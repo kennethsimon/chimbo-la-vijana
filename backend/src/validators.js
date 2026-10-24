@@ -46,6 +46,10 @@ export const lookupSchema = z.object({
   scanDay: eventDaySchema.optional()
 });
 
+export const attendeeSearchSchema = z.object({
+  query: z.string().trim().min(2).max(120)
+});
+
 export const visitSchema = z.object({
   ticketCode: z.string().trim().min(4).max(80),
   boothId: z.string().uuid().optional().nullable(),

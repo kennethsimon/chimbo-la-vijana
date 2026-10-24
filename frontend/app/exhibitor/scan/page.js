@@ -26,6 +26,8 @@ function Scanner({ user }) {
   const mountedRef = useRef(true);
   const stoppingRef = useRef(false);
   const [ticketCode, setTicketCode] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
   const [lookup, setLookup] = useState(null);
   const [loading, setLoading] = useState("");
   const [usedDialog, setUsedDialog] = useState(null);
@@ -61,7 +63,10 @@ function Scanner({ user }) {
   }, [isAdmin, toast]);
 
   useEffect(() => {
-    if (mode === "booth") setLookup(null);
+    if (mode === "booth") {
+      setLookup(null);
+      setSearchResults([]);
+    }
   }, [selectedBoothId, mode]);
 
   async function stopScannerSafely() {
@@ -100,6 +105,8 @@ function Scanner({ user }) {
           if (!mountedRef.current) return;
           const code = decodedText.trim();
           setTicketCode(code);
+          setSearchTerm(code);
+          setSearchResults([]);
           await lookupTicket(code);
         }
       );
@@ -127,6 +134,9 @@ function Scanner({ user }) {
     setLookup(null);
     try {
       const result = await post("/exhibitor/scans/lookup", scanPayload({ ticketCode: code }));
+      setTicketCode(result.attendee.ticketCode);
+      setSearchTerm(result.attendee.ticketCode);
+      setSearchResults([]);
       setLookup(result);
       setVisit(defaultVisit());
       if (mode === "booth" && result.attendee.attendanceDays?.includes(scanDay) && !result.currentBoothVisit) {
@@ -138,6 +148,47 @@ function Scanner({ user }) {
     } finally {
       setLoading("");
     }
+  }
+
+  async function searchAttendee() {
+    const query = searchTerm.trim();
+    if (query.length < 2) {
+      toast.warning("Andika angalau herufi mbili, namba ya simu, au ticket code.");
+      return;
+    }
+    if (requiresBoothChoice && !selectedBoothId) {
+      toast.warning("Chagua banda kabla ya kutafuta mshiriki.");
+      return;
+    }
+    setLoading("lookup");
+    setLookup(null);
+    setSearchResults([]);
+    try {
+      const result = await post("/exhibitor/scans/search", { query });
+      const attendees = result.attendees || [];
+      if (!attendees.length) {
+        toast.error("Hakuna mshiriki aliyepatikana.");
+        return;
+      }
+      if (attendees.length === 1) {
+        setTicketCode(attendees[0].ticketCode);
+        await lookupTicket(attendees[0].ticketCode);
+        return;
+      }
+      setSearchResults(attendees);
+      toast.warning("Wapo washiriki zaidi ya mmoja. Chagua mshiriki sahihi.");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function chooseSearchResult(attendee) {
+    setTicketCode(attendee.ticketCode);
+    setSearchTerm(attendee.ticketCode);
+    setSearchResults([]);
+    await lookupTicket(attendee.ticketCode);
   }
 
   async function saveVisit(surveyStatus = "completed") {
@@ -215,6 +266,7 @@ function Scanner({ user }) {
     if (nextMode === "checkin" && !canCheckIn) return;
     setMode(nextMode);
     setLookup(null);
+    setSearchResults([]);
     setSurveyOpen(false);
   }
 
@@ -308,6 +360,7 @@ function Scanner({ user }) {
                   <SelectInput value={scanDay} onChange={(e) => {
                     setScanDay(e.target.value);
                     setLookup(null);
+                    setSearchResults([]);
                   }}>
                     <option value="2026-10-24">24 October</option>
                     <option value="2026-10-25">25 October</option>
@@ -322,11 +375,43 @@ function Scanner({ user }) {
                   </Field>
                 ) : null}
                 <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <Field label="Ingiza ticket code kwa mkono">
-                    <TextInput className="h-14 text-xl font-black uppercase" value={ticketCode} onChange={(e) => setTicketCode(e.target.value.toUpperCase())} placeholder="CLV-XXXXXX" />
+                  <Field label="Tafuta kwa ticket code, jina au simu">
+                    <TextInput
+                      className="h-14 text-base font-semibold"
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setSearchResults([]);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") searchAttendee();
+                      }}
+                      placeholder="CLV-XXXXXX, jina au 0687..."
+                    />
                   </Field>
-                  <Button className="h-14" disabled={loading === "lookup"} variant="sun" onClick={() => lookupTicket()}>{loading === "lookup" ? <Spinner /> : <Search size={18} />} Tafuta</Button>
+                  <Button className="h-14" disabled={loading === "lookup"} variant="sun" onClick={searchAttendee}>{loading === "lookup" ? <Spinner /> : <Search size={18} />} Tafuta</Button>
                 </div>
+                {searchResults.length ? (
+                  <div className="mt-3 overflow-hidden rounded-md border border-white/15 bg-white text-foreground">
+                    <div className="border-b bg-secondary px-3 py-2 text-xs font-bold uppercase text-muted-foreground">Chagua mshiriki sahihi</div>
+                    <div className="divide-y">
+                      {searchResults.map((attendee) => (
+                        <button
+                          className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-secondary/60"
+                          key={attendee.id}
+                          onClick={() => chooseSearchResult(attendee)}
+                          type="button"
+                        >
+                          <span className="min-w-0">
+                            <strong className="block truncate text-sm">{attendee.name}</strong>
+                            <span className="block text-xs text-muted-foreground">{attendee.phone}</span>
+                          </span>
+                          <Badge>{attendee.ticketCode}</Badge>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               {lookup ? (

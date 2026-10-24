@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { hasRole, requireAuth, requireRole } from "../auth.js";
-import { checkinSchema, EVENT_DAYS, foodSchema, lookupSchema, validate, visitSchema } from "../validators.js";
+import { normalizeAttendeePhoneSearch } from "../attendeeSearch.js";
+import { attendeeSearchSchema, checkinSchema, EVENT_DAYS, foodSchema, lookupSchema, validate, visitSchema } from "../validators.js";
 import { buildVisitSurveyAnswers, isTrainingCentre, servicesForBooth, TRAINING_INSTITUTIONS } from "../boothSurvey.js";
 
 export const exhibitorRouter = Router();
@@ -9,6 +10,42 @@ export const exhibitorRouter = Router();
 const REQUIRED_FOOD_BOOTHS = 3;
 
 exhibitorRouter.use(requireAuth, requireRole("admin", "exhibitor", "food", "checkin"));
+
+exhibitorRouter.post("/scans/search", validate(attendeeSearchSchema), async (req, res, next) => {
+  try {
+    const query = req.validated.query;
+    const phoneDigits = normalizeAttendeePhoneSearch(query);
+    const { rows } = await pool.query(
+      `SELECT id, ticket_code, name, phone, attendance_days
+       FROM attendees
+       WHERE upper(ticket_code) = upper($1)
+          OR ($2::text IS NOT NULL AND regexp_replace(phone, '\\D', '', 'g') = $2)
+          OR position(lower($1) in lower(name)) > 0
+       ORDER BY
+         CASE
+           WHEN upper(ticket_code) = upper($1) THEN 0
+           WHEN $2::text IS NOT NULL AND regexp_replace(phone, '\\D', '', 'g') = $2 THEN 1
+           WHEN lower(name) = lower($1) THEN 2
+           WHEN left(lower(name), length($1)) = lower($1) THEN 3
+           ELSE 4
+         END,
+         name ASC
+       LIMIT 12`,
+      [query, phoneDigits]
+    );
+    res.json({
+      attendees: rows.map((row) => ({
+        id: row.id,
+        ticketCode: row.ticket_code,
+        name: row.name,
+        phone: row.phone,
+        attendanceDays: normalizeAttendanceDays(row.attendance_days)
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 exhibitorRouter.post("/scans/lookup", validate(lookupSchema), async (req, res, next) => {
   try {

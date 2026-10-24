@@ -20,7 +20,7 @@ exhibitorRouter.post("/scans/search", validate(attendeeSearchSchema), async (req
        FROM attendees
        WHERE upper(ticket_code) = upper($1)
           OR ($2::text IS NOT NULL AND regexp_replace(phone, '\\D', '', 'g') = $2)
-          OR position(lower($1) in lower(name)) > 0
+          OR position(' ' || lower($1) in ' ' || lower(name)) > 0
        ORDER BY
          CASE
            WHEN upper(ticket_code) = upper($1) THEN 0

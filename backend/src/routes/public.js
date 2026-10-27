@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { generateTicketCode } from "../codegen.js";
+import { config } from "../config.js";
 import { pool, withTransaction } from "../db.js";
 import { sendTicketEmail } from "../email.js";
 import { sendRegistrationSms } from "../sms.js";
@@ -12,6 +13,15 @@ export const publicRouter = Router();
 publicRouter.post(
   "/registrations",
   rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }),
+  (req, res, next) => {
+    if (!config.registrationsOpen) {
+      return res.status(410).json({
+        error: "registration_closed",
+        message: "Usajili wa Chimbo La Vijana Brunch umefungwa kwa sababu tukio limekamilika."
+      });
+    }
+    next();
+  },
   validate(registrationSchema),
   async (req, res, next) => {
     try {

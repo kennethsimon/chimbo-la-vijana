@@ -24,6 +24,7 @@ export const config = {
   resendApiKey: process.env.RESEND_API_KEY || "",
   emailFrom: process.env.EMAIL_FROM || "Chimbo Events <tickets@example.com>",
   eventName: process.env.EVENT_NAME || "Chimbo La Vijana Brunch",
+  registrationsOpen: process.env.REGISTRATION_OPEN === "true",
   smsApiBaseUrl: process.env.SMS_API_BASE_URL || "https://messaging-service.co.tz",
   smsApiToken: process.env.SMS_API_TOKEN || "",
   smsSenderId: process.env.SMS_SENDER_ID || ""

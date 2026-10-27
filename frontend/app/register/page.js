@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock, MapPin } from "lucide-react";
+import { CalendarDays, CalendarX2, CheckCircle2, ChevronLeft, ChevronRight, Clock, MapPin } from "lucide-react";
 import { ACTIVITIES, REGIONS } from "../../lib/regions";
 import { post } from "../../lib/api";
 import { Button, Card, CardContent, Field, Popover, PopoverContent, PopoverTrigger, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Spinner, TextInput } from "../../components/ui";
@@ -13,6 +13,7 @@ import { ThemeToggle } from "../../components/ThemeToggle";
 const TANZANIA_PHONE_PATTERN = "^(\\+255|255|0)(6|7)\\d{8}$";
 const TANZANIA_PHONE_REGEX = /^(\+255|255|0)(6|7)\d{8}$/;
 const EVENT_START_AT = new Date("2026-10-24T12:00:00+03:00").getTime();
+const REGISTRATIONS_OPEN = false;
 
 const initialForm = {
   name: "",
@@ -127,7 +128,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          <Card className="shadow-glow">
+          {REGISTRATIONS_OPEN ? <Card className="shadow-glow">
             <CardContent className="grid gap-5 p-5 sm:p-6">
               <div>
                 <div className="mb-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase text-primary">{t("registerEyebrow")}</div>
@@ -184,7 +185,22 @@ export default function RegisterPage() {
               </form>
               <p className="text-center text-xs font-bold uppercase tracking-normal text-primary">{t("registerNow")}</p>
             </CardContent>
-          </Card>
+          </Card> : (
+            <Card className="shadow-glow">
+              <CardContent className="flex min-h-72 flex-col items-center justify-center p-6 text-center sm:p-10">
+                <div className="mb-5 grid size-14 place-items-center rounded-full bg-primary/10 text-primary">
+                  <CalendarX2 size={28} />
+                </div>
+                <div className="mb-3 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-bold uppercase text-primary">
+                  {t("registerEyebrow")}
+                </div>
+                <h2 className="text-2xl font-semibold tracking-normal sm:text-3xl">{t("registrationClosedTitle")}</h2>
+                <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground sm:text-base">
+                  {t("registrationClosedDescription")}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </section>
       </div>
     </main>
